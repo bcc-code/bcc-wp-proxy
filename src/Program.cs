@@ -16,12 +16,20 @@ namespace bcc_wp_proxy
             CreateHostBuilder(args).Build().Run();
         }
 
-        public static IHostBuilder CreateHostBuilder(string[] args) { 
+        public static IHostBuilder CreateHostBuilder(string[] args) {
 
             return Host.CreateDefaultBuilder(args)
                 .ConfigureWebHostDefaults(webBuilder =>
                 {
-                    webBuilder.UseStartup<Startup>().UseUrls(url);
+                    webBuilder.UseStartup<Startup>();
+                })
+                .ConfigureAppConfiguration((_, config) =>
+                {
+                    var gcpProjectId = Environment.GetEnvironmentVariable("GCP_ProjectID");
+                    if (!string.IsNullOrEmpty(gcpProjectId))
+                    {
+                        config.AddGCMSecretsConfiguration(gcpProjectId);
+                    }
                 });
 
             }

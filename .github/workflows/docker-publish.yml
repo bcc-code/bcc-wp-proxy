@@ -88,6 +88,7 @@ jobs:
           --region europe-west1 \
           --port 80 \
           --allow-unauthenticated \
+          --update-env-vars GCP_ProjectID=${{ secrets.GCLOUD_PROJECT }}
           --platform managed
         
 
