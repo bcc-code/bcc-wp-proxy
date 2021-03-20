@@ -26,7 +26,7 @@ namespace bcc_wp_proxy
                 .ConfigureAppConfiguration((_, config) =>
                 {
                     var gcpProjectId = Environment.GetEnvironmentVariable("GCP_ProjectID");
-                    if (!string.IsNullOrEmpty(gcpProjectId))
+                    if (false && !string.IsNullOrEmpty(gcpProjectId)) //NB: Temporarily disabled provider, because the Google SDK is not compatible with .net 5
                     {
                         config.AddGCMSecretsConfiguration(gcpProjectId);
                     }
