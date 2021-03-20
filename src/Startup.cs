@@ -88,7 +88,7 @@ namespace bcc_wp_proxy
             }
 
 
-
+            app.UseStaticFiles();
             app.UseRouting();
             app.UseAuthentication();
             app.UseAuthorization();
