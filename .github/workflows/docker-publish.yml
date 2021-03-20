@@ -86,7 +86,7 @@ jobs:
           gcloud run deploy ${{ secrets.GCLOUD_APP_NAME }} --image $IMAGE_ID:$VERSION \
           --project ${{ secrets.GCLOUD_PROJECT }} \
           --region europe-west1 \
-          --port 8080 \
+          --port 80 \
           --allow-unauthenticated \
           --platform managed
         
