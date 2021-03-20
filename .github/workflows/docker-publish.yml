@@ -78,3 +78,18 @@ jobs:
 
           docker tag $IMAGE_NAME $IMAGE_ID:$VERSION
           docker push $IMAGE_ID:$VERSION
+  
+  deploy:
+    name: Deploy job
+    runs-on: ubuntu-latest
+    steps:
+      - name: Authenticate into Google Cloud Platform
+        uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+        with:
+          service_account_email: ${{ secrets.GCLOUD_EMAIL }}
+          service_account_key: ${{ secrets.GCLOUD_KEY }}
+          
+      - name: Deploy on cloud run
+        run: |
+          gcloud run deploy ${{ secrets.GCLOUD_APP_NAME }} --quiet --image docker.pkg.github.com/${{ github.repository }}/$IMAGE_NAME --project ${{ secrets.GCLOUD_PROJECT }} --region europe-west1 --platform managed
+
