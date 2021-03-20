@@ -132,7 +132,9 @@ namespace bcc_wp_proxy
                         var error = errorFeature.Error;
                         var exception = errorFeature.Exception;
                     }
-                }).RequireAuthorization(WPProxySettings.AuthorizationPolicy);
+                })
+                //.RequireAuthorization(WPProxySettings.AuthorizationPolicy)
+                ;
 
                 endpoints.MapDefaultControllerRoute();
 
