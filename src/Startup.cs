@@ -100,12 +100,19 @@ namespace bcc_wp_proxy
             //});
 
 
-            app.Use(async (context, next) =>
-            {
-                Endpoint endpoint = context.GetEndpoint();
+            //app.Use(async (context, next) =>
+            //{
+            //    Endpoint endpoint = context.GetEndpoint();
 
-                /// Do stuff
-                await next();
+            //    /// Do stuff
+            //    await next();
+            //});
+
+
+            app.Use(next => context => {
+                // Force https scheme (since request inside a docker container may appear to be http)
+                context.Request.Scheme = "https";
+                return next(context);
             });
 
             var httpClient = new HttpMessageInvoker(new WPMessageHandler(cache, settings));
