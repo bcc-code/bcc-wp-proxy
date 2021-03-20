@@ -62,7 +62,7 @@ jobs:
       - name: Configure Docker to use Google Cloud Platform
         run: "gcloud auth configure-docker --quiet"
         
-      - name: Push image to Google Cloud Container Registry
+      - name: Push and deploy image
         run: |
           IMAGE_ID=eu.gcr.io/${{ secrets.GCLOUD_PROJECT }}/${{ secrets.GCLOUD_APP_NAME }}
           # Change all uppercase to lowercase
@@ -82,13 +82,13 @@ jobs:
 
           docker tag $IMAGE_NAME $IMAGE_ID:$VERSION
           docker push $IMAGE_ID:$VERSION
-        
-      - name: Install beta commands and deploy on cloud run
-        run: |
+          
           gcloud run deploy ${{ secrets.GCLOUD_APP_NAME }} --image $IMAGE_ID:$VERSION \
           --project ${{ secrets.GCLOUD_PROJECT }} \
           --region europe-west1 \
           --platform managed
+        
+
 
           
       
