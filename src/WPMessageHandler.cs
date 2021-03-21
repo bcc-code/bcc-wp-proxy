@@ -87,7 +87,11 @@ namespace BCC.WPProxy
                 // Cache content
                 if (response.StatusCode == HttpStatusCode.OK && canCache)
                 {
-                    Cache.Set(requestKey, (response, content), TimeSpan.FromSeconds(60));
+                    Cache.Set(requestKey, (response, content), new MemoryCacheEntryOptions
+                    {
+                        SlidingExpiration = TimeSpan.FromMinutes(60),
+                        Priority = CacheItemPriority.High
+                    });
                 }
             }
             return response;
