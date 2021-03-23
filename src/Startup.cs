@@ -23,7 +23,7 @@ namespace bcc_wp_proxy
 {
     public class Startup
     {
-        public IConfiguration Configuration;
+        public IConfiguration Configuration { get; }
 
         public Startup(IConfiguration configuration)
         {
@@ -95,6 +95,7 @@ namespace bcc_wp_proxy
             services.AddControllersWithViews();
 
             services.AddSingleton<CacheService>();
+            services.AddApplicationInsightsTelemetry();
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.

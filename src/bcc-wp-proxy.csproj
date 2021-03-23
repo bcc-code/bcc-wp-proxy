@@ -7,10 +7,12 @@
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
     <DockerfileContext>.</DockerfileContext>
     <AssemblyName>BCC.WPProxy</AssemblyName>
+    <ApplicationInsightsResourceId>/subscriptions/a77a3461-9212-44cf-bc6a-11c6281797e9/resourcegroups/FraBegynnelsen/providers/Microsoft.Insights/components/frabegynnelsen-wp-proxy-dev</ApplicationInsightsResourceId>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Google.Cloud.SecretManager.V1" Version="1.3.0" />
+    <PackageReference Include="Microsoft.ApplicationInsights.AspNetCore" Version="2.15.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="5.0.4" />
     <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="5.0.1" />
     <PackageReference Include="Microsoft.ReverseProxy" Version="1.0.0-preview.9.21116.1" />
