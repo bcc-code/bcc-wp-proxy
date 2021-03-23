@@ -17,6 +17,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.AspNetCore.Routing.Matching;
+using Microsoft.Extensions.Caching.Distributed;
 
 namespace bcc_wp_proxy
 {
@@ -34,7 +35,22 @@ namespace bcc_wp_proxy
         // For more information on how to configure your application, visit https://go.microsoft.com/fwlink/?LinkID=398940
         public void ConfigureServices(IServiceCollection services)
         {
-            services.AddSingleton(c => Configuration.GetSection("WPProxy").Get<WPProxySettings>());
+            var configuration = Configuration.GetSection("WPProxy").Get<WPProxySettings>();
+
+            if (!configuration.UseRedis)
+            {
+                services.AddDistributedMemoryCache();
+            }
+            else
+            {
+                services.AddStackExchangeRedisCache(cnf =>
+                {
+                    cnf.InstanceName = configuration.RedisInstanceName;
+                    cnf.Configuration = $"{configuration.RedisIpAddress}:{configuration.RedisPort },DefaultDatabase=1";
+                });
+            }
+
+            services.AddSingleton(c => configuration);
             services.AddSingleton<EndpointSelector, WPProxyEndpointSelector>();
             services.AddHttpProxy();
             services.AddReverseProxy().AddConfig();
@@ -77,10 +93,12 @@ namespace bcc_wp_proxy
 
             // Add framework services.
             services.AddControllersWithViews();
+
+            services.AddSingleton<CacheService>();
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-        public void Configure(IApplicationBuilder app, IWebHostEnvironment env, IHttpProxy httpProxy, IMemoryCache cache, WPProxySettings settings)
+        public void Configure(IApplicationBuilder app, IWebHostEnvironment env, IHttpProxy httpProxy, IMemoryCache cache, IDistributedCache distributedCache, WPProxySettings settings)
         {
             if (env.IsDevelopment())
             {
@@ -115,7 +133,7 @@ namespace bcc_wp_proxy
                 return next(context);
             });
 
-            var httpClient = new HttpMessageInvoker(new WPMessageHandler(cache, settings));
+            var httpClient = new HttpMessageInvoker(new WPMessageHandler(new CacheService(cache, distributedCache, settings), settings));
             var transformer = new WPRequestTransformer(); // or HttpTransformer.Default;
             var requestOptions = new RequestProxyOptions { Timeout = TimeSpan.FromSeconds(100) };
             app.UseEndpoints(endpoints =>

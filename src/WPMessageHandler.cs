@@ -13,7 +13,7 @@ namespace BCC.WPProxy
 {
     public class WPMessageHandler : DelegatingHandler
     {
-        public WPMessageHandler(IMemoryCache cache, WPProxySettings settings) : base(new SocketsHttpHandler()
+        public WPMessageHandler(CacheService cache, WPProxySettings settings) : base(new SocketsHttpHandler()
         {
             UseProxy = false,
             AllowAutoRedirect = false,
@@ -25,8 +25,52 @@ namespace BCC.WPProxy
             Settings = settings;
         }
 
-        public IMemoryCache Cache { get; }
+        public CacheService Cache { get; }
         public WPProxySettings Settings { get; }
+
+        public class ResponseCacheItem
+        {
+            public string Content { get; set; }
+            public string Url { get; set; }
+            public int Status { get; set; }
+            public string MediaType { get; set; }
+            public Version Version { get; set; }
+
+            public Dictionary<string,string[]> Headers { get; set; }
+
+            public static ResponseCacheItem FromResponse(HttpResponseMessage response, string content)
+            {
+                var itm = new ResponseCacheItem
+                {
+                    Content = content,
+                    Status = (int)response.StatusCode,
+                    Headers = new Dictionary<string, string[]>(),
+                    MediaType = response.Content.Headers.ContentType.MediaType,
+                    Url = response.RequestMessage.RequestUri.ToString(),
+                    Version = response.Version
+                };
+                foreach (var header in response.Headers)
+                {
+                    itm.Headers[header.Key] = header.Value.ToArray();
+                }
+                return itm;
+            }
+
+            public HttpResponseMessage ToResponseMessage()
+            {
+                var msg = new HttpResponseMessage
+                {
+                    Content = new StringContent(this.Content.ToString(), Encoding.UTF8, this.MediaType),
+                    StatusCode = (HttpStatusCode)this.Status,
+                    Version = this.Version
+                };
+                foreach (var header in this.Headers)
+                {
+                    msg.Headers.Add(header.Key, header.Value);
+                }
+                return msg;
+            }
+        }
 
         protected async override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -39,11 +83,10 @@ namespace BCC.WPProxy
             // Load from cache
             if (canCache)
             {
-                var requestCache = Cache.Get<(HttpResponseMessage Response, string Content)>(requestKey);
-                if (requestCache.Response != null)
+                var cachedResponse = await Cache.GetAsync<ResponseCacheItem>(requestKey);
+                if (cachedResponse != null)
                 {
-                    requestCache.Response.Content = new StringContent(requestCache.Content, Encoding.UTF8, requestCache.Response.Content.Headers.ContentType.MediaType);
-                    return requestCache.Response;
+                    return cachedResponse.ToResponseMessage();
                 }
 
                 if (request.Headers.Contains("Cookie"))
@@ -87,11 +130,8 @@ namespace BCC.WPProxy
                 // Cache content
                 if (response.StatusCode == HttpStatusCode.OK || (int)response.StatusCode >= 400 && (int)response.StatusCode <= 500 && canCache)
                 {
-                    Cache.Set(requestKey, (response, content), new MemoryCacheEntryOptions
-                    {
-                        SlidingExpiration = TimeSpan.FromMinutes(60),
-                        Priority = CacheItemPriority.High
-                    });
+                    // Cache Item (if not already cached)
+                    await Cache.GetOrCreateAsync(requestKey, () => Task.FromResult(ResponseCacheItem.FromResponse(response, content)));
                 }
             }
             return response;
