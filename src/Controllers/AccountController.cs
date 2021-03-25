@@ -28,6 +28,7 @@ namespace BCC.WPProxy.Controllers
             //    // **Allowed Logout URLs** settings for the app.
             //    RedirectUri = Url.Action("Index", "Home")
             //});
+            
             await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
         }
     }

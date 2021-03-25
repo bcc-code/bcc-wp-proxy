@@ -18,6 +18,10 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.AspNetCore.Routing.Matching;
 using Microsoft.Extensions.Caching.Distributed;
+using StackExchange.Redis;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 
 namespace bcc_wp_proxy
 {
@@ -46,13 +50,20 @@ namespace bcc_wp_proxy
                 services.AddStackExchangeRedisCache(cnf =>
                 {
                     cnf.InstanceName = configuration.RedisInstanceName;
-                    cnf.Configuration = $"{configuration.RedisIpAddress}:{configuration.RedisPort },DefaultDatabase=1";
+                    cnf.Configuration = $"{configuration.RedisIpAddress}:{configuration.RedisPort},DefaultDatabase=1";
                 });
+
+                // Ensure cookies work across all container instances
+                var redis = ConnectionMultiplexer.Connect($"{configuration.RedisIpAddress}:{configuration.RedisPort}");
+                services.AddDataProtection()
+                        .PersistKeysToStackExchangeRedis(redis, "wp-proxy-dataprotection-keys");
+
             }
 
             services.AddSingleton(c => configuration);
             services.AddSingleton<EndpointSelector, WPProxyEndpointSelector>();
             services.AddHttpProxy();
+            services.AddHttpClient();
             services.AddReverseProxy().AddConfig();
             services.AddAuthorization(options =>
             {
@@ -61,45 +72,66 @@ namespace bcc_wp_proxy
 
             //services.ConfigureSameSiteNoneCookies();
 
-            services.AddAuthentication(options => {
+            services.AddAuthentication(options =>
+            {
                 options.DefaultAuthenticateScheme = CookieAuthenticationDefaults.AuthenticationScheme;
                 options.DefaultSignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
                 options.DefaultChallengeScheme = CookieAuthenticationDefaults.AuthenticationScheme;
             })
            .AddCookie()
-           .AddOpenIdConnect("Auth0", options => {
-                // Set the authority to your Auth0 domain
-                options.Authority = Configuration["Authentication:Authority"];
+           .AddOpenIdConnect("Auth0", options =>
+           {
+               // Set the authority to your Auth0 domain
+               options.Authority = Configuration["Authentication:Authority"];
 
-                // Configure the Auth0 Client ID and Client Secret
-                options.ClientId = Configuration["Authentication:ClientId"];
-                options.ClientSecret = Configuration["Authentication:ClientSecret"];
+               // Configure the Auth0 Client ID and Client Secret
+               options.ClientId = Configuration["Authentication:ClientId"];
+               options.ClientSecret = Configuration["Authentication:ClientSecret"];
 
-                // Set response type to code
-                options.ResponseType = OpenIdConnectResponseType.Code;
+               options.Events.OnRedirectToIdentityProvider = context =>
+               {
+                   // Required for getting access token in JWT format (for widgets)
+                   context.ProtocolMessage.SetParameter("audience", Configuration["Authentication:Audience"]);
+                   return Task.CompletedTask;
+               };
 
-                // Configure the scope
-                options.Scope.Clear();
-                options.Scope.Add("openid");
+               // Set response type to code
+               options.ResponseType = OpenIdConnectResponseType.Code;
 
-                // Set the callback path, so Auth0 will call back to /callback
-                // Also ensure that you have added the URL as an Allowed Callback URL in your Auth0 dashboard
-                options.CallbackPath = new PathString("/callback");
 
-                // Configure the Claims Issuer to be Auth0
-                options.ClaimsIssuer = "Auth0";
+               options.SaveTokens = true;
+
+               options.GetClaimsFromUserInfoEndpoint = false;
+
+               options.UseTokenLifetime = true;
+
+               // Configure the scope
+               options.Scope.Clear();
+               options.Scope.Add(Configuration["Authentication:Scopes"]);
+
+               // Set the callback path, so Auth0 will call back to /callback
+               // Also ensure that you have added the URL as an Allowed Callback URL in your Auth0 dashboard
+               options.CallbackPath = new PathString("/callback");
+
+               // Configure the Claims Issuer to be Auth0
+               options.ClaimsIssuer = "Auth0";
+
            });
-           services.AddMemoryCache();
+            services.AddMemoryCache();
 
             // Add framework services.
             services.AddControllersWithViews();
 
             services.AddSingleton<CacheService>();
+            services.AddSingleton<WPApiClient>();
+            services.AddSingleton<WPUserService>();
+            services.AddSingleton<WPMessageHandler>();
+            services.AddSingleton<WPMessageInvokerFactory>();
             services.AddApplicationInsightsTelemetry();
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-        public void Configure(IApplicationBuilder app, IWebHostEnvironment env, IHttpProxy httpProxy, IMemoryCache cache, IDistributedCache distributedCache, WPProxySettings settings)
+        public void Configure(IApplicationBuilder app, IWebHostEnvironment env, IHttpProxy httpProxy, WPMessageInvokerFactory messageInvoker, WPProxySettings settings)
         {
             if (env.IsDevelopment())
             {
@@ -123,27 +155,25 @@ namespace bcc_wp_proxy
             //{
             //    Endpoint endpoint = context.GetEndpoint();
 
-            //    /// Do stuff
             //    await next();
             //});
 
 
-            app.Use(next => context => {
+            app.Use(next => context =>
+            {
                 // Force https scheme (since request inside a docker container may appear to be http)
                 context.Request.Scheme = "https";
                 return next(context);
             });
 
-            var httpClient = new HttpMessageInvoker(new WPMessageHandler(new CacheService(cache, distributedCache, settings), settings));
             var transformer = new WPRequestTransformer(); // or HttpTransformer.Default;
             var requestOptions = new RequestProxyOptions { Timeout = TimeSpan.FromSeconds(100) };
             app.UseEndpoints(endpoints =>
             {
-
                 endpoints.Map("/{**catch-all}", async httpContext => //
                 {
-                    await httpProxy.ProxyAsync(httpContext, settings.DestinationAddress, httpClient,
-                        requestOptions, transformer);
+
+                    await httpProxy.ProxyAsync(httpContext, settings.DestinationAddress, messageInvoker.Create(), requestOptions, transformer);
 
                     var errorFeature = httpContext.Features.Get<IProxyErrorFeature>();
                     if (errorFeature != null)
@@ -152,8 +182,7 @@ namespace bcc_wp_proxy
                         var exception = errorFeature.Exception;
                     }
                 })
-                //.RequireAuthorization(WPProxySettings.AuthorizationPolicy)
-                ;
+                .RequireAuthorization(WPProxySettings.AuthorizationPolicy);
 
                 endpoints.MapDefaultControllerRoute();
 
@@ -169,8 +198,8 @@ namespace bcc_wp_proxy
         {
             public override Task SelectAsync(HttpContext httpContext, CandidateSet candidates)
             {
-                
-                for (var i=0; i<candidates.Count; i++)
+
+                for (var i = 0; i < candidates.Count; i++)
                 {
                     if (candidates[i].Endpoint.DisplayName != "/{**catch-all}" || candidates.Count == 1)
                     {

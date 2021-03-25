@@ -53,7 +53,7 @@ namespace BCC.WPProxy
         private static ConcurrentDictionary<string, SemaphoreSlim> _cacheSemaphores = new ConcurrentDictionary<string, SemaphoreSlim>();
 
 
-        public async Task<T> GetOrCreateAsync<T>(string key, Func<Task<T>> createFn, CancellationToken cancellation = default)
+        public async Task<T> GetOrCreateAsync<T>(string key, Func<Task<T>> createFn, TimeSpan? slidingExpiration = default, CancellationToken cancellation = default)
         {
             // Attempt to get from cache before requesting semaphore
             var value = default(T);
@@ -70,7 +70,8 @@ namespace BCC.WPProxy
                 return await MemoryCache.GetOrCreateAsync(key, async (cache) =>
                 {
                     // Cache settings
-                    cache.SlidingExpiration = Settings.CacheLifetime;
+                    cache.SlidingExpiration = slidingExpiration ?? Settings.CacheDefaultSlidingExpiration;
+                    cache.AbsoluteExpirationRelativeToNow = Settings.CacheDefaultAbsoluteExpiration;
 
                     // Attempt to retrieve from distributed cache first
                     var result = await DistributedCache.GetStringAsync(key);
@@ -91,7 +92,9 @@ namespace BCC.WPProxy
                         var strSourceValue = ConvertToString(sourceValue);
                         await DistributedCache.SetStringAsync(key, strSourceValue, new DistributedCacheEntryOptions
                         {
-                            SlidingExpiration = Settings.CacheLifetime
+                            SlidingExpiration = slidingExpiration ?? Settings.CacheDefaultSlidingExpiration,
+                            AbsoluteExpirationRelativeToNow = Settings.CacheDefaultAbsoluteExpiration
+                            
                         }, cancellation);
                     }
                     return sourceValue;
@@ -109,7 +112,8 @@ namespace BCC.WPProxy
         {
             MemoryCache.Set(key, value, new MemoryCacheEntryOptions
             {
-                SlidingExpiration = Settings.CacheLifetime
+                SlidingExpiration = Settings.CacheDefaultSlidingExpiration,
+                AbsoluteExpirationRelativeToNow = Settings.CacheDefaultAbsoluteExpiration
             });
         }
 

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Claims;
 using System.Threading.Tasks;
 
 namespace BCC.WPProxy
@@ -10,7 +11,9 @@ namespace BCC.WPProxy
         public const string AuthorizationPolicy = "wp-proxy";
         public string DestinationAddress { get; set; }
 
-        public TimeSpan CacheLifetime { get; set; } = TimeSpan.FromSeconds(15);
+        public TimeSpan CacheDefaultSlidingExpiration { get; set; } = TimeSpan.FromSeconds(10);
+
+        public TimeSpan CacheDefaultAbsoluteExpiration { get; set; } = TimeSpan.FromMinutes(5);
 
         public bool UseRedis { get; set; } = false;
 
@@ -20,7 +23,19 @@ namespace BCC.WPProxy
 
         public string RedisPort { get; set; }
 
+        public string ProxyKey { get; set; }
+
+        public string UserLoginClaimType { get; set; }
+
+        public string OrganisationClaimType { get; set; }
+
+        public string HasMembershipClaimType { get; set; }
+
+        public string CountryClaimType { get; set; }
+
         private string _destinationHost;
+
+
         public string DestinationHost
         {
             get
