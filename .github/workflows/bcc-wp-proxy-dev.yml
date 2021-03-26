@@ -2,9 +2,9 @@ name: BCC WP Proxy - Test
 
 on:
   push:
-    # Publish `master` as Docker `latest` image.
+    # Publish `develop` as Docker `latest` image.
     branches:
-      - master
+      - develop
 
     # Publish `v1.2.3` tags as releases.
     tags:
