@@ -92,15 +92,15 @@ jobs:
           --port 80 \
           --allow-unauthenticated \
           --update-env-vars GCP_ProjectID=${{ secrets.GCLOUD_PROJECT }} \
-          --update-evn-var WPProxy__DestinationAddress=${{ secrets.PROXY_DESTINATION_ADDRESS }} \
-          --update-evn-var WPProxy__ProxyAddress=${{ secrets.PROXY_ADDRESS }} \
-          --update-evn-var WPProxy__UseRedis=true \
-          --update-evn-var WPProxy__RedisInstanceName=${{ secrets.PROXY_REDIS_INSTANCE_NAME }} \
-          --update-evn-var WPProxy__RedisIpAddress=${{ secrets.PROXY_REDIS_IP_ADDRESS }} \
-          --update-evn-var WPProxy__RedisPort=${{ secrets.PROXY_REDIS_PORT }} \
-          --update-evn-var WPProxy__ProxyKey=${{ secrets.PROXY_KEY }} \
-          --update-evn-var WPProxy__GoogleStorageBucket=${{ secrets.PROXY_STORAGE_BUCKET_NAME }} \
-          --update-evn-var Authentication_Authority=${{ secrets.AUTH_AUTHORITY }} \
-          --update-evn-var Authentication_ClientId=${{ secrets.AUTH_CLIENT_ID }} \
-          --update-evn-var Authentication_ClientSecret=${{ secrets.AUTH_CLIENT_SECRET }} \
+          --update-evn-vars WPProxy__DestinationAddress=${{ secrets.PROXY_DESTINATION_ADDRESS }} \
+          --update-evn-vars WPProxy__ProxyAddress=${{ secrets.PROXY_ADDRESS }} \
+          --update-evn-vars WPProxy__UseRedis=true \
+          --update-evn-vars WPProxy__RedisInstanceName=${{ secrets.PROXY_REDIS_INSTANCE_NAME }} \
+          --update-evn-vars WPProxy__RedisIpAddress=${{ secrets.PROXY_REDIS_IP_ADDRESS }} \
+          --update-evn-vars WPProxy__RedisPort=${{ secrets.PROXY_REDIS_PORT }} \
+          --update-evn-vars WPProxy__ProxyKey=${{ secrets.PROXY_KEY }} \
+          --update-evn-vars WPProxy__GoogleStorageBucket=${{ secrets.PROXY_STORAGE_BUCKET_NAME }} \
+          --update-evn-vars Authentication_Authority=${{ secrets.AUTH_AUTHORITY }} \
+          --update-evn-vars Authentication_ClientId=${{ secrets.AUTH_CLIENT_ID }} \
+          --update-evn-vars Authentication_ClientSecret=${{ secrets.AUTH_CLIENT_SECRET }} \
           --platform managed
