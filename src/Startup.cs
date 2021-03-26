@@ -62,7 +62,7 @@ namespace bcc_wp_proxy
 
             }
 
-            if (!string.IsNullOrEmpty(settings.GoogleStorageBucket))
+            if (string.IsNullOrEmpty(settings.GoogleStorageBucket))
             {
                 services.AddSingleton<IFileStore>(c => new PhysicalFileStore(new PhysicalFileProvider(Directory.GetCurrentDirectory() + "/Files")));
             }
