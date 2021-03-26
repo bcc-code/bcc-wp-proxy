@@ -100,7 +100,8 @@ jobs:
           --update-env-vars WPProxy__RedisPort=${{ secrets.PROXY_REDIS_PORT }} \
           --update-env-vars WPProxy__ProxyKey=${{ secrets.PROXY_KEY }} \
           --update-env-vars WPProxy__GoogleStorageBucket=${{ secrets.PROXY_STORAGE_BUCKET_NAME }} \
-          --update-env-vars Authentication_Authority=${{ secrets.AUTH_AUTHORITY }} \
-          --update-env-vars Authentication_ClientId=${{ secrets.AUTH_CLIENT_ID }} \
-          --update-env-vars Authentication_ClientSecret=${{ secrets.AUTH_CLIENT_SECRET }} \
+          --update-env-vars Authentication__Authority=${{ secrets.AUTH_AUTHORITY }} \
+          --update-env-vars Authentication__ClientId=${{ secrets.AUTH_CLIENT_ID }} \
+          --update-env-vars Authentication__ClientSecret=${{ secrets.AUTH_CLIENT_SECRET }} \
+          --update-env-vars ApplicationInsights__ConnectionString=${{ secrets.APPINSIGHTS_CONNECTION_STRING }} \
           --platform managed
