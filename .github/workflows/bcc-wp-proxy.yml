@@ -1,4 +1,4 @@
-name: Docker
+name: BCC WP Proxy - Production
 
 on:
   push:
@@ -44,7 +44,7 @@ jobs:
     # Ensure test job passes before pushing image.
     #needs: test
     
-    environment: bcc-prod
+    environment: bcc-wp-proxy
 
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
@@ -87,15 +87,20 @@ jobs:
           
           gcloud run deploy ${{ secrets.GCLOUD_APP_NAME }} --image $IMAGE_ID:$VERSION \
           --project ${{ secrets.GCLOUD_PROJECT }} \
-          --region europe-west1 \
+          --region europe-north1 \
           --vpc-connector ${{ secrets.GCLOUD_VPC_CONNECTOR_NAME }} \
           --port 80 \
           --allow-unauthenticated \
           --update-env-vars GCP_ProjectID=${{ secrets.GCLOUD_PROJECT }} \
+          --update-evn-var WPProxy__DestinationAddress=${{ secrets.PROXY_DESTINATION_ADDRESS }} \
+          --update-evn-var WPProxy__ProxyAddress=${{ secrets.PROXY_ADDRESS }} \
+          --update-evn-var WPProxy__UseRedis=true \
+          --update-evn-var WPProxy__RedisInstanceName=${{ secrets.PROXY_REDIS_INSTANCE_NAME }} \
+          --update-evn-var WPProxy__RedisIpAddress=${{ secrets.PROXY_REDIS_IP_ADDRESS }} \
+          --update-evn-var WPProxy__RedisPort=${{ secrets.PROXY_REDIS_PORT }} \
+          --update-evn-var WPProxy__ProxyKey=${{ secrets.PROXY_KEY }} \
+          --update-evn-var WPProxy__GoogleStorageBucket=${{ secrets.PROXY_STORAGE_BUCKET_NAME }} \
+          --update-evn-var Authentication_Authority=${{ secrets.AUTH_AUTHORITY }} \
+          --update-evn-var Authentication_ClientId=${{ secrets.AUTH_CLIENT_ID }} \
+          --update-evn-var Authentication_ClientSecret=${{ secrets.AUTH_CLIENT_SECRET }} \
           --platform managed
-        
-
-
-          
-      
-
