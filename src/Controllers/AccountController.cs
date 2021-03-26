@@ -19,17 +19,22 @@ namespace BCC.WPProxy.Controllers
         }
 
         [Authorize]
-        public async Task Logout()
-        {
-            //await HttpContext.SignOutAsync("Auth0", new AuthenticationProperties
-            //{
-            //    // Indicate here where Auth0 should redirect the user after a logout.
-            //    // Note that the resulting absolute Uri must be added to the
-            //    // **Allowed Logout URLs** settings for the app.
-            //    RedirectUri = Url.Action("Index", "Home")
-            //});
-            
+        public async Task Logout(string returnUrl = "/")
+        {            
+            await HttpContext.SignOutAsync("Auth0", new AuthenticationProperties
+            {
+                // Indicate here where Auth0 should redirect the user after a logout.
+                // Note that the resulting absolute Uri must be added to the
+                // **Allowed Logout URLs** settings for the app.
+                RedirectUri = Url.Action("Account", "LogoutCallback", new { returnUrl })
+            });
+
             await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+        }
+
+        public ActionResult LogoutCallback(string returnUrl = "/")
+        {
+            return Redirect(returnUrl);
         }
     }
 }

@@ -22,6 +22,8 @@ using StackExchange.Redis;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.Extensions.FileProviders;
+using System.IO;
 
 namespace bcc_wp_proxy
 {
@@ -39,9 +41,9 @@ namespace bcc_wp_proxy
         // For more information on how to configure your application, visit https://go.microsoft.com/fwlink/?LinkID=398940
         public void ConfigureServices(IServiceCollection services)
         {
-            var configuration = Configuration.GetSection("WPProxy").Get<WPProxySettings>();
+            var settings = Configuration.GetSection("WPProxy").Get<WPProxySettings>();
 
-            if (!configuration.UseRedis)
+            if (!settings.UseRedis)
             {
                 services.AddDistributedMemoryCache();
             }
@@ -49,25 +51,37 @@ namespace bcc_wp_proxy
             {
                 services.AddStackExchangeRedisCache(cnf =>
                 {
-                    cnf.InstanceName = configuration.RedisInstanceName;
-                    cnf.Configuration = $"{configuration.RedisIpAddress}:{configuration.RedisPort},DefaultDatabase=1";
+                    cnf.InstanceName = settings.RedisInstanceName;
+                    cnf.Configuration = $"{settings.RedisIpAddress}:{settings.RedisPort},DefaultDatabase=1";
                 });
 
                 // Ensure cookies work across all container instances
-                var redis = ConnectionMultiplexer.Connect($"{configuration.RedisIpAddress}:{configuration.RedisPort}");
+                var redis = ConnectionMultiplexer.Connect($"{settings.RedisIpAddress}:{settings.RedisPort}");
                 services.AddDataProtection()
                         .PersistKeysToStackExchangeRedis(redis, "wp-proxy-dataprotection-keys");
 
             }
 
-            services.AddSingleton(c => configuration);
+            if (!string.IsNullOrEmpty(settings.GoogleStorageBucket))
+            {
+                services.AddSingleton<IFileStore>(c => new PhysicalFileStore(new PhysicalFileProvider(Directory.GetCurrentDirectory() + "/Files")));
+            }
+            else
+            {
+                services.AddSingleton<IFileStore>(c => new GCPStorageStore(settings));
+            }
+
+            services.AddSingleton(c => settings);
             services.AddSingleton<EndpointSelector, WPProxyEndpointSelector>();
             services.AddHttpProxy();
             services.AddHttpClient();
             services.AddReverseProxy().AddConfig();
             services.AddAuthorization(options =>
             {
-                options.AddPolicy(WPProxySettings.AuthorizationPolicy, policy => policy.RequireAuthenticatedUser());
+                options.AddPolicy(WPProxySettings.AuthorizationPolicy, policy =>
+                {
+                    policy.RequireAuthenticatedUser();
+                });
             });
 
             //services.ConfigureSameSiteNoneCookies();
@@ -92,6 +106,13 @@ namespace bcc_wp_proxy
                {
                    // Required for getting access token in JWT format (for widgets)
                    context.ProtocolMessage.SetParameter("audience", Configuration["Authentication:Audience"]);
+                   return Task.CompletedTask;
+               };
+
+               options.Events.OnRedirectToIdentityProviderForSignOut = context =>
+               {
+                   context.ProtocolMessage.IssuerAddress =
+                      $"{Configuration["Authentication:Authority"].TrimEnd('/')}/{Configuration["Authentication:LogoutEndpoint"].TrimStart('/')}";
                    return Task.CompletedTask;
                };
 
@@ -122,7 +143,7 @@ namespace bcc_wp_proxy
             // Add framework services.
             services.AddControllersWithViews();
 
-            services.AddSingleton<CacheService>();
+            services.AddSingleton<WPCacheService>();
             services.AddSingleton<WPApiClient>();
             services.AddSingleton<WPUserService>();
             services.AddSingleton<WPMessageHandler>();
@@ -170,6 +191,12 @@ namespace bcc_wp_proxy
             var requestOptions = new RequestProxyOptions { Timeout = TimeSpan.FromSeconds(100) };
             app.UseEndpoints(endpoints =>
             {
+                // Dont't authenticate manifest.json
+                endpoints.Map("/manifest.json", async httpContext => //
+                {
+                    await httpProxy.ProxyAsync(httpContext, settings.DestinationAddress, messageInvoker.Create(), requestOptions, transformer);
+                });
+
                 endpoints.Map("/{**catch-all}", async httpContext => //
                 {
 
@@ -185,10 +212,6 @@ namespace bcc_wp_proxy
                 .RequireAuthorization(WPProxySettings.AuthorizationPolicy);
 
                 endpoints.MapDefaultControllerRoute();
-
-                //endpoints.MapReverseProxy();
-
-
 
             });
         }

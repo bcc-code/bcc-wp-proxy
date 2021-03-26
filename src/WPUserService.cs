@@ -9,14 +9,14 @@ namespace BCC.WPProxy
 {
     public class WPUserService
     {
-        public WPUserService(CacheService cache, WPProxySettings settings, WPApiClient wpApi)
+        public WPUserService(WPCacheService cache, WPProxySettings settings, WPApiClient wpApi)
         {
             Cache = cache;
             Settings = settings;
             WPApi = wpApi;
         }
 
-        public CacheService Cache { get; }
+        public WPCacheService Cache { get; }
         public WPProxySettings Settings { get; }
         public WPApiClient WPApi { get; }
 
@@ -31,15 +31,16 @@ namespace BCC.WPProxy
             {
                 var userEmail = user.FindFirst(ClaimTypes.Email)?.Value;
                 var userLogin = user.FindFirst(Settings.UserLoginClaimType)?.Value;
-                var organization = user.FindFirst(Settings.OrganisationClaimType)?.Value;
-                var hasMembership = user.FindFirst(Settings.HasMembershipClaimType)?.Value?.ToLower() ?? "false";
-                bool bHasMembership = hasMembership == "true" || hasMembership == "1";
+                var userOrganization = user.FindFirst(Settings.UserOrganizationClaimType)?.Value;
+                var isMember = Settings.SiteOrganizationName.Equals(userOrganization, StringComparison.OrdinalIgnoreCase);
+                var isSubscriber = bool.Parse(user.FindFirst(Settings.IsSubscriberClaimType)?.Value?.ToLower() ?? "false");
 
                 var users = await GetWPUsersAsync();
                 var match = users.FirstOrDefault(u => u.IsEnabled && !string.IsNullOrEmpty(u.Email) && u.Email.Equals(userEmail, StringComparison.OrdinalIgnoreCase)) ??
                             users.FirstOrDefault(u => u.IsEnabled && !string.IsNullOrEmpty(u.Login) && u.Login.Equals(userLogin, StringComparison.OrdinalIgnoreCase)) ??
-                            users.FirstOrDefault(u => u.IsEnabled && !string.IsNullOrEmpty(u.Login) && bHasMembership && u.Login.Equals(organization, StringComparison.OrdinalIgnoreCase)) ??
-                            users.FirstOrDefault(u => u.IsEnabled && !string.IsNullOrEmpty(u.Login) && bHasMembership && u.Login.Equals("Member", StringComparison.OrdinalIgnoreCase));
+                            users.FirstOrDefault(u => u.IsEnabled && !string.IsNullOrEmpty(u.Login) && u.Login.Equals(userOrganization, StringComparison.OrdinalIgnoreCase)) ??
+                            users.FirstOrDefault(u => u.IsEnabled && !string.IsNullOrEmpty(u.Login) && isMember && u.Login.Equals("member", StringComparison.OrdinalIgnoreCase)) ??
+                            users.FirstOrDefault(u => u.IsEnabled && !string.IsNullOrEmpty(u.Login) && isSubscriber && u.Login.Equals("subscriber", StringComparison.OrdinalIgnoreCase));
 
                 var wpId = match?.ID ?? 0;
                 return wpId;
@@ -49,11 +50,7 @@ namespace BCC.WPProxy
         private Task<List<WPUser>> GetWPUsersAsync()
         {
             return Cache.GetOrCreateAsync($"{Settings.DestinationAddress}|wp-users", () => WPApi.GetAsync<List<WPUser>>("users"), TimeSpan.FromMinutes(15));
-        }
-
-        
-
-        
+        }        
     }
 
     public class WPUser

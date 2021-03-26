@@ -11,9 +11,9 @@ namespace BCC.WPProxy
         public const string AuthorizationPolicy = "wp-proxy";
         public string DestinationAddress { get; set; }
 
-        public TimeSpan CacheDefaultSlidingExpiration { get; set; } = TimeSpan.FromSeconds(10);
+        public TimeSpan CacheDefaultSlidingExpiration { get; set; } = TimeSpan.FromSeconds(60);
 
-        public TimeSpan CacheDefaultAbsoluteExpiration { get; set; } = TimeSpan.FromMinutes(5);
+        public TimeSpan CacheDefaultAbsoluteExpiration { get; set; } = TimeSpan.FromMinutes(30);
 
         public bool UseRedis { get; set; } = false;
 
@@ -27,9 +27,13 @@ namespace BCC.WPProxy
 
         public string UserLoginClaimType { get; set; }
 
-        public string OrganisationClaimType { get; set; }
+        public string UserOrganizationClaimType { get; set; }
 
-        public string HasMembershipClaimType { get; set; }
+        public string IsSubscriberClaimType { get; set; }
+
+        public string SiteOrganizationName { get; set; }
+
+        public string GoogleStorageBucket { get; set; }
 
         public string CountryClaimType { get; set; }
 
