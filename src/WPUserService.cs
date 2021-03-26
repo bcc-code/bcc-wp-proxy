@@ -49,7 +49,7 @@ namespace BCC.WPProxy
 
         private Task<List<WPUser>> GetWPUsersAsync()
         {
-            return Cache.GetOrCreateAsync($"{Settings.DestinationAddress}|wp-users", () => WPApi.GetAsync<List<WPUser>>("users"), TimeSpan.FromMinutes(15));
+            return Cache.GetOrCreateAsync($"{Settings.DestinationAddress}|wp-users", () => WPApi.GetAsync<List<WPUser>>("users"), TimeSpan.FromMinutes(5));
         }        
     }
 
