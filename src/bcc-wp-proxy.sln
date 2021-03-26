@@ -7,7 +7,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "bcc-wp-proxy", "bcc-wp-prox
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{6996C839-16A4-41B7-A325-DBF1E3F363BA}"
 	ProjectSection(SolutionItems) = preProject
-		..\.github\workflows\docker-publish.yml = ..\.github\workflows\docker-publish.yml
+		..\.github\workflows\bcc-wp-proxy-dev.yml = ..\.github\workflows\bcc-wp-proxy-dev.yml
+		..\.github\workflows\bcc-wp-proxy.yml = ..\.github\workflows\bcc-wp-proxy.yml
 	EndProjectSection
 EndProject
 Global
