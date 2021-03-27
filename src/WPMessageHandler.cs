@@ -119,7 +119,7 @@ namespace BCC.WPProxy
 
                 
                 // Cache content
-                if ((response.StatusCode == HttpStatusCode.OK || (int)response.StatusCode >= 400)
+                if ((response.StatusCode == HttpStatusCode.OK) //|| (int)response.StatusCode >= 400)
                     && (int)response.StatusCode <= 500 
                     && canCache)
                 {
