@@ -11,6 +11,8 @@ namespace BCC.WPProxy
         public const string AuthorizationPolicy = "wp-proxy";
         public string DestinationAddress { get; set; }
 
+        public string WwwDestinationAddress => DestinationAddress.Replace("://", "://www.");
+
         public TimeSpan CacheDefaultSlidingExpiration { get; set; } = TimeSpan.FromSeconds(60);
 
         public TimeSpan CacheDefaultAbsoluteExpiration { get; set; } = TimeSpan.FromMinutes(30);

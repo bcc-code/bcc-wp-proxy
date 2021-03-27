@@ -196,10 +196,19 @@ namespace BCC.WPProxy
         /// <returns></returns>
         protected string TransformResponseContent(string sourceContent)
         {
-            return sourceContent
+            var result = sourceContent
                     .Replace(Settings.DestinationAddress, Settings.ProxyAddress)
                     .Replace(Settings.DestinationAddress.Replace("/", "\\/"), Settings.ProxyAddress.Replace("/", "\\/"))
                     .Replace("http://", "https://");
+
+            if (Settings.WwwDestinationAddress != Settings.ProxyAddress)
+            {
+                result = result
+                    .Replace(Settings.WwwDestinationAddress, Settings.ProxyAddress)
+                    .Replace(Settings.WwwDestinationAddress.Replace("/", "\\/"), Settings.ProxyAddress.Replace("/", "\\/"))
+                    .Replace("http://", "https://");
+            }
+            return result;
         }
 
         /// <summary>
@@ -214,6 +223,13 @@ namespace BCC.WPProxy
                 response.Headers.Location = new Uri(response.Headers.Location.ToString()
                     .Replace(Settings.DestinationAddress, Settings.ProxyAddress)
                     .Replace(WebUtility.UrlEncode(Settings.DestinationAddress), WebUtility.UrlEncode(Settings.ProxyAddress)));
+
+                if (Settings.WwwDestinationAddress != Settings.ProxyAddress)
+                {
+                    response.Headers.Location = new Uri(response.Headers.Location.ToString()
+                         .Replace(Settings.WwwDestinationAddress, Settings.ProxyAddress)
+                         .Replace(WebUtility.UrlEncode(Settings.WwwDestinationAddress), WebUtility.UrlEncode(Settings.ProxyAddress)));
+                }
             }
 
         }
