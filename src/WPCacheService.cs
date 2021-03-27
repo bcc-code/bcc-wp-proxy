@@ -25,6 +25,7 @@ namespace BCC.WPProxy
         public WPProxySettings Settings { get; }
         public WPApiClient Wordpress { get; }
 
+
         public async Task<T> GetAsync<T>(string key, bool refreshOnWPUpdate = true, CancellationToken cancellation = default)
         {
             var wpTimestamp = refreshOnWPUpdate ? await GetWPLastUpdatedAsync(cancellation) : 0;

@@ -61,6 +61,7 @@ namespace bcc_wp_proxy
                         .PersistKeysToStackExchangeRedis(redis, "wp-proxy-dataprotection-keys");
 
             }
+            services.AddMemoryCache();
 
             if (string.IsNullOrEmpty(settings.GoogleStorageBucket))
             {
@@ -92,7 +93,18 @@ namespace bcc_wp_proxy
                 options.DefaultSignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
                 options.DefaultChallengeScheme = CookieAuthenticationDefaults.AuthenticationScheme;
             })
-           .AddCookie()
+           .AddCookie(o =>
+           {
+               if (settings.UseRedis)
+               {
+                   var provider = services.BuildServiceProvider();
+                   o.SessionStore = new RedisSessionStore(provider.GetRequiredService<IMemoryCache>(), provider.GetRequiredService<IDistributedCache>());
+               }
+               else
+               {
+                   o.SessionStore = new InMemorySessionStore();
+               }
+           })
            .AddOpenIdConnect("Auth0", options =>
            {
                // Set the authority to your Auth0 domain
@@ -138,7 +150,7 @@ namespace bcc_wp_proxy
                options.ClaimsIssuer = "Auth0";
 
            });
-            services.AddMemoryCache();
+            
 
             // Add framework services.
             services.AddControllersWithViews();

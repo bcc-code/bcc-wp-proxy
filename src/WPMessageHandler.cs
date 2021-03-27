@@ -119,7 +119,7 @@ namespace BCC.WPProxy
 
                 
                 // Cache content
-                if ((response.StatusCode == HttpStatusCode.OK) //|| (int)response.StatusCode >= 400)
+                if ((response.StatusCode == HttpStatusCode.OK || (int)response.StatusCode >= 400)
                     && (int)response.StatusCode <= 500 
                     && canCache)
                 {
@@ -142,13 +142,14 @@ namespace BCC.WPProxy
                 var ms = new MemoryStream();
                 await content.CopyToAsync(ms);
                 ms.Position = 0;
-                await FileStore.WriteFileAsync(cacheKey, ms);
+                var storageKey = Settings.DestinationHost.Replace(":","-") + "-" + cacheKey;
+                await FileStore.WriteFileAsync(storageKey, ms);
                 ms.Position = 0;
                 response.Content = new StreamContent(ms);
 
                 // Create cache entry
                 await Cache.GetOrCreateAsync(cacheKey, () => Task.FromResult(
-                        ResponseCacheItem.ForStreamContent(response, cacheKey)), 
+                        ResponseCacheItem.ForStreamContent(response, storageKey)), 
                         TimeSpan.FromMinutes(15),
                         refreshOnWPUpdate: !staticContent
                 );

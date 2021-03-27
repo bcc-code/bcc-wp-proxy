@@ -52,7 +52,23 @@ namespace BCC.WPProxy
                 }
                 return _destinationHost;
             }
-        } 
+        }
+
+        private string _proxyHost;
+
+
+        public string ProxyHost
+        {
+            get
+            {
+                if (_proxyHost == null)
+                {
+                    _proxyHost = ProxyAddress?.Replace("https://", "").Replace("http://", "").Trim('/');
+                }
+                return _proxyHost;
+            }
+        }
+
 
         public string ProxyAddress { get; set; }
     }
