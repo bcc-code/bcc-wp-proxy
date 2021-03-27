@@ -102,7 +102,9 @@ namespace BCC.WPProxy
 
 
             // Execute request
+            request.Version = new Version(1,1); // Backwards compatiblity
             var response = await base.SendAsync(request, cancellationToken);
+
             var mediaType = response.Content?.Headers?.ContentType?.MediaType ?? "";
             var isText = mediaType.IndexOf("text") != -1 || 
                          mediaType.IndexOf("json") != -1 || 
