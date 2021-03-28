@@ -38,45 +38,11 @@ namespace BCC.WPProxy
         public WPUserService UserService { get; }
         public WPProxySettings Settings { get; }
 
-      
-        protected async override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            var requestUri = request.RequestUri.ToString();
-
-            // Reroute access token requests
-            if (requestUri.Contains("access-token.php"))
-            {
-                return new HttpResponseMessage
-                {
-                    Content = new StringContent(await HttpContext.HttpContext.GetTokenAsync("access_token"))
-                };
-            }
-            if (requestUri.Contains("id-token.php"))
-            {
-                return new HttpResponseMessage
-                {
-                    Content = new StringContent(await HttpContext.HttpContext.GetTokenAsync("id_token"))
-                };
-            }
-
-            // Reroute logut
-            if (requestUri.Contains("action=logout"))
-            {
-                var referrer = request.Headers.Referrer?.ToString() ?? "/";
-                return Redirect($"/account/logout?returnUrl={WebUtility.UrlEncode(referrer)}");
-            }
-
-            // Modify request headers (for authentication)
-            var wpUserId = (await UserService.MapToWpUserAsync(HttpContext.HttpContext.User)).ToString();
-            request.Headers.Add("X-Wp-Proxy-User-Id", wpUserId);
-            request.Headers.Add("X-Wp-Proxy-Key", Settings.ProxyKey);
-            request.Headers.Host = Settings.DestinationHost;
-
-
-            // Determine if content can/should be cached
-
-            var canCache = request.Method == HttpMethod.Get && requestUri.IndexOf("wp-admin") == -1;
-            var staticContent = requestUri.IndexOf(".js") != -1 ||
+        bool IsAccessTokenRequest(string requestUri) => requestUri.Contains("access-token.php");
+        bool IsIdTokenRequest(string requestUri) => requestUri.Contains("id-token.php");
+        bool IsLogoutRequest(string requestUri) => requestUri.Contains("action=logout");
+        bool IsStaticContent(string requestUri) => 
+                                    requestUri.IndexOf(".js") != -1 ||
                                     requestUri.IndexOf(".css") != -1 ||
                                     requestUri.IndexOf(".png") != -1 ||
                                     requestUri.IndexOf(".gif") != -1 ||
@@ -85,59 +51,89 @@ namespace BCC.WPProxy
                                     requestUri.IndexOf(".jpg") != -1 ||
                                     requestUri.IndexOf(".jpeg") != -1 ||
                                     requestUri.IndexOf(".woff") != -1;
+        bool CanCacheRequest(HttpRequestMessage request) => request.Method == HttpMethod.Get && request.RequestUri.ToString().IndexOf("wp-admin") == -1;
+        bool IsTextMediaType(string mediaType) => 
+                                    (mediaType.IndexOf("text") != -1 || 
+                                     mediaType.IndexOf("json") != -1 || 
+                                     mediaType.IndexOf("xml") != -1 || 
+                                     mediaType.IndexOf("javascript") != -1) &&
+                                     mediaType.IndexOf("image") == -1;
+
+        bool IsMultimediaMediaType(string mediaType) =>
+                          mediaType.IndexOf("image") != -1 ||
+                          mediaType.IndexOf("font") != -1 ||
+                          mediaType.IndexOf("audio") != -1 ||
+                          mediaType.IndexOf("video") != -1 ||
+                          mediaType.IndexOf("application") != -1;
+
+        protected async override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var requestUri = request.RequestUri.ToString();
+
+            // Reroute access token requests
+            if (IsAccessTokenRequest(requestUri))
+            {
+                return new HttpResponseMessage { Content = new StringContent(await HttpContext.HttpContext.GetTokenAsync("access_token")) };
+            }
+            if (IsIdTokenRequest(requestUri))
+            {
+                return new HttpResponseMessage { Content = new StringContent(await HttpContext.HttpContext.GetTokenAsync("id_token")) };
+            }
+            // Reroute logut
+            if (IsLogoutRequest(requestUri))
+            {
+                return Redirect($"/account/logout?returnUrl={WebUtility.UrlEncode(request.Headers.Referrer.ToString() ?? "/")}");
+            }
+
+            // Modify request headers (for authentication)
+            var wpUserId = (await UserService.MapToWpUserAsync(HttpContext.HttpContext.User)).ToString();
+            request.Headers.Add("X-Wp-Proxy-User-Id", wpUserId);
+            request.Headers.Add("X-Wp-Proxy-Key", Settings.ProxyKey);
+            request.Headers.Host = Settings.DestinationHost;
+
+            // Determine if content can/should be cached
+            var canCache = CanCacheRequest(request);
+            var isStaticContent = IsStaticContent(requestUri);
 
             // Determine cache key
-            var requestKey = canCache ? (request.RequestUri.ToString() + "|" + (staticContent ? 0 : wpUserId)) : null;
-            var cacheKey = canCache ? ComputeSha256Hash(requestKey) : null;
+            var requestKey = canCache ? (request.RequestUri.ToString() + "|" + (isStaticContent ? 0 : wpUserId)) : null;            
+            var cacheKey = canCache ? ComputeCacheKeyHash(requestKey) : null;
 
             // Load from cache
             if (canCache)
             {
-                var cachedResponse = await Cache.GetAsync<ResponseCacheItem>(cacheKey, refreshOnWPUpdate: !staticContent);
+                var cachedResponse = await Cache.GetAsync<ResponseCacheItem>(cacheKey, refreshOnWPUpdate: !isStaticContent);
                 if (cachedResponse != null)
                 {
                     return await cachedResponse.ToResponseMessage(FileStore);
                 }
             }
 
-
             // Execute request
-            request.Version = new Version(1,1); // Backwards compatiblity
+            request.Version = new Version(1,1); // Backwards compatiblity for old servers
             var response = await base.SendAsync(request, cancellationToken);
 
+            // Handle depending on media type
             var mediaType = response.Content?.Headers?.ContentType?.MediaType ?? "";
-            var isText = mediaType.IndexOf("text") != -1 || 
-                         mediaType.IndexOf("json") != -1 || 
-                         mediaType.IndexOf("xml") != -1 || 
-                         mediaType.IndexOf("javascript") != -1;
-
-            if (isText)
+            if (IsTextMediaType(mediaType))
             {
                 // Read content and transform content (replace destination address with proxy address)
                 var content = TransformResponseContent(await response.Content.ReadAsStringAsync());                
                 response.Content = new StringContent(content, Encoding.UTF8, response.Content.Headers.ContentType.MediaType);
-
                 
                 // Cache content
-                if ((response.StatusCode == HttpStatusCode.OK || (int)response.StatusCode >= 400)
-                    && (int)response.StatusCode <= 500 
-                    && canCache)
+                if (canCache &&
+                    (response.StatusCode == HttpStatusCode.OK || (int)response.StatusCode >= 400)
+                    && (int)response.StatusCode <= 500)
                 {
                     // Cache Item (if not already cached)
                     await Cache.GetOrCreateAsync(cacheKey, () => Task.FromResult(ResponseCacheItem.ForTextContent(response, content)), refreshOnWPUpdate: true);
                 }
-            }
-
-
-            var isImage = mediaType.IndexOf("jpg") != -1 ||
-                          mediaType.IndexOf("jpeg") != -1 || 
-                          mediaType.IndexOf("png") != -1 ||
-                          mediaType.IndexOf("woff") != -1 ||
-                          mediaType.IndexOf("gif") != -1;
-            if (isImage)
+            } 
+            else if (IsMultimediaMediaType(mediaType))
             {
-                
                 // Save file to disk
+                var contentHeaders = response.Content.Headers;
                 var content = await response.Content.ReadAsStreamAsync();
                 var ms = new MemoryStream();
                 await content.CopyToAsync(ms);
@@ -146,12 +142,16 @@ namespace BCC.WPProxy
                 await FileStore.WriteFileAsync(storageKey, ms);
                 ms.Position = 0;
                 response.Content = new StreamContent(ms);
+                foreach (var header in contentHeaders)
+                {
+                    response.Content.Headers.Add(header.Key, header.Value);
+                }
 
                 // Create cache entry
                 await Cache.GetOrCreateAsync(cacheKey, () => Task.FromResult(
                         ResponseCacheItem.ForStreamContent(response, storageKey)), 
                         TimeSpan.FromMinutes(15),
-                        refreshOnWPUpdate: !staticContent
+                        refreshOnWPUpdate: !isStaticContent
                 );
             }
 
@@ -173,9 +173,9 @@ namespace BCC.WPProxy
             return response;
         }
 
-        static string ComputeSha256Hash(string rawData)
+        static string ComputeCacheKeyHash(string rawData)
         {   
-            using (var sha = SHA1.Create())
+            using (var sha = SHA256.Create())
             {
                 // ComputeHash - returns byte array  
                 byte[] bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(rawData));
@@ -246,6 +246,7 @@ namespace BCC.WPProxy
             public string StorageKey { get; set; }
 
             public Dictionary<string, string[]> Headers { get; set; }
+            public Dictionary<string, string[]> ContentHeaders { get; set; }
 
             public static ResponseCacheItem ForTextContent(HttpResponseMessage response, string content)
             {
@@ -255,6 +256,7 @@ namespace BCC.WPProxy
                     Content = content,
                     Status = (int)response.StatusCode,
                     Headers = new Dictionary<string, string[]>(),
+                    ContentHeaders = new Dictionary<string, string[]>(),
                     MediaType = response.Content.Headers.ContentType.MediaType,
                     Url = response.RequestMessage.RequestUri.ToString(),
                     Version = response.Version
@@ -265,6 +267,10 @@ namespace BCC.WPProxy
                     {
                         itm.Headers[header.Key] = header.Value.ToArray();
                     }
+                }
+                foreach (var header in response.Content.Headers)
+                {
+                    itm.ContentHeaders[header.Key] = header.Value.ToArray();
                 }
                 return itm;
             }
@@ -277,7 +283,8 @@ namespace BCC.WPProxy
                     Content = null,
                     Status = (int)response.StatusCode,
                     Headers = new Dictionary<string, string[]>(),
-                    MediaType = null,
+                    ContentHeaders = new Dictionary<string, string[]>(),
+                    MediaType = response.Content.Headers.ContentType.MediaType,
                     Url = response.RequestMessage.RequestUri.ToString(),
                     Version = response.Version
                 };
@@ -287,6 +294,10 @@ namespace BCC.WPProxy
                     {
                         itm.Headers[header.Key] = header.Value.ToArray();
                     }
+                }
+                foreach (var header in response.Content.Headers)
+                {
+                    itm.ContentHeaders[header.Key] = header.Value.ToArray();                    
                 }
                 return itm;
             }
@@ -301,10 +312,8 @@ namespace BCC.WPProxy
 
                 if (!string.IsNullOrEmpty(StorageKey))
                 {
-                    var ms = new MemoryStream();
-                    await fileStore.ReadFileAsync(StorageKey, ms);
-                    ms.Position = 0;
-                    msg.Content = new StreamContent(ms);
+                    var stream = await fileStore.ReadFileAsync(StorageKey);
+                    msg.Content = new StreamContent(stream);
                 }
                 else
                 {
@@ -313,6 +322,18 @@ namespace BCC.WPProxy
                 foreach (var header in this.Headers)
                 {
                     msg.Headers.Add(header.Key, header.Value);
+                }
+                foreach (var header in this.ContentHeaders)
+                {
+                    if (header.Key.Equals("content-type", StringComparison.OrdinalIgnoreCase))
+                    {
+                        msg.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(MediaType);
+                    }
+                    else
+                    {
+                        msg.Content.Headers.Add(header.Key, header.Value);
+                    }
+                    
                 }
                 return msg;
             }

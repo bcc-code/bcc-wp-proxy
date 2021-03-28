@@ -10,7 +10,7 @@ namespace BCC.WPProxy
     {
         Task WriteFileAsync(string name, Stream fileStream);
 
-        Task<bool> ReadFileAsync(string name, Stream desinationStream);
+        Task<Stream> ReadFileAsync(string name);
 
         Task<bool> FileExistsAsync(string name);
 

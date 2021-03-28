@@ -13,9 +13,13 @@ namespace BCC.WPProxy
 
         public string WwwDestinationAddress => DestinationAddress.Replace("://", "://www.");
 
-        public TimeSpan CacheDefaultSlidingExpiration { get; set; } = TimeSpan.FromSeconds(60);
+        public TimeSpan CacheDefaultSlidingExpiration { get; set; } = TimeSpan.FromMinutes(10);
 
-        public TimeSpan CacheDefaultAbsoluteExpiration { get; set; } = TimeSpan.FromMinutes(30);
+        public TimeSpan CacheDefaultAbsoluteExpiration { get; set; } = TimeSpan.FromHours(6);
+
+        public TimeSpan ImageMemoryCacheSlidingExpiration { get; set; } = TimeSpan.FromMinutes(60);
+
+        public int ImageMemoryCacheMaxSizeInBytes { get; set; } = 250000; //250kb
 
         public bool UseRedis { get; set; } = false;
 

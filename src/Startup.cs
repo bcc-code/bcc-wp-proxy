@@ -63,13 +63,15 @@ namespace bcc_wp_proxy
             }
             services.AddMemoryCache();
 
+            var cacheProvider = services.BuildServiceProvider();
+
             if (string.IsNullOrEmpty(settings.GoogleStorageBucket))
             {
                 services.AddSingleton<IFileStore>(c => new PhysicalFileStore(new PhysicalFileProvider(Directory.GetCurrentDirectory() + "/Files")));
             }
             else
             {
-                services.AddSingleton<IFileStore>(c => new GCPStorageStore(settings));
+                services.AddSingleton<IFileStore>(c => new GCPStorageStore(settings, cacheProvider.GetRequiredService<IDistributedCache>()));
             }
 
             services.AddSingleton(c => settings);
@@ -97,8 +99,7 @@ namespace bcc_wp_proxy
            {
                if (settings.UseRedis)
                {
-                   var provider = services.BuildServiceProvider();
-                   o.SessionStore = new RedisSessionStore(provider.GetRequiredService<IMemoryCache>(), provider.GetRequiredService<IDistributedCache>());
+                   o.SessionStore = new RedisSessionStore(cacheProvider.GetRequiredService<IMemoryCache>(), cacheProvider.GetRequiredService<IDistributedCache>());
                }
                else
                {

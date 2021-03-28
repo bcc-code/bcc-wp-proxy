@@ -21,16 +21,15 @@ namespace BCC.WPProxy
             return Task.FromResult(FileProvider.GetFileInfo(name).Exists);
         }
 
-        public async Task<bool> ReadFileAsync(string name, Stream destinationStream)
+        public Task<Stream> ReadFileAsync(string name)
         {
             var file = FileProvider.GetFileInfo(name);
             if (file.Exists)
             {
                 var stream = file.CreateReadStream();
-                await stream.CopyToAsync(destinationStream);
-                return true;
+                return Task.FromResult(stream);
             }
-            return false;
+            return null;
         }
 
         public async Task WriteFileAsync(string name, Stream fileStream)
