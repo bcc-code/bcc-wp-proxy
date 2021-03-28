@@ -33,7 +33,10 @@ namespace BCC.WPProxy
                 var expiry = ticket.Properties?.ExpiresUtc ?? DateTimeOffset.Now.AddDays(1);
                 Cache.Set(key, ticket, expiry);
                 var value = TicketSerializer.Default.Serialize(ticket);
-                await DistributedCache.SetAsync(key, value);
+                await DistributedCache.SetAsync(key, value, new DistributedCacheEntryOptions
+                {
+                    AbsoluteExpiration = expiry
+                });
             }
         }
 
@@ -60,7 +63,10 @@ namespace BCC.WPProxy
             var expiry = ticket.Properties?.ExpiresUtc ?? DateTimeOffset.Now.AddDays(1);
             Cache.Set(key, ticket, expiry);
             var value = TicketSerializer.Default.Serialize(ticket);
-            await DistributedCache.SetAsync(key, value);
+            await DistributedCache.SetAsync(key, value, new DistributedCacheEntryOptions
+            {
+                AbsoluteExpiration = expiry
+            });
             return key;
         }
     }
