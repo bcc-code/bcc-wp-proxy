@@ -127,11 +127,12 @@ namespace BCC.WPProxy
                 }
             }
 
+            //if (ShouldRedirectToNormalizedUrl(request, proxyAddress, out string normalizedUrl))
+            //{
+            //    return Redirect(normalizedUrl);
+            //}
+
             // Execute request
-            if (ShouldRedirectToNormalizedUrl(request, proxyAddress, out string normalizedUrl))
-            {
-                return Redirect(normalizedUrl);
-            }
             var response = await base.SendAsync(request, cancellationToken);
             if (response.StatusCode == HttpStatusCode.Unauthorized)
             {
