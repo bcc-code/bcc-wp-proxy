@@ -26,17 +26,19 @@ namespace BCC.WPProxy
         })
         {
             FileStore = fileStore;
-            HttpContext = httpContext;
+            Context = httpContext;
             Cache = cache;
             UserService = userService;
             Settings = settings;
         }
 
         public IFileStore FileStore { get; }
-        public IHttpContextAccessor HttpContext { get; }
+        public IHttpContextAccessor Context { get; }
         public WPCacheService Cache { get; }
         public WPUserService UserService { get; }
         public WPProxySettings Settings { get; }
+
+        public HttpContext HttpContext => Context.HttpContext;
 
         bool IsAccessTokenRequest(string requestUri) => requestUri.Contains("access-token.php");
         bool IsIdTokenRequest(string requestUri) => requestUri.Contains("id-token.php");
@@ -52,6 +54,11 @@ namespace BCC.WPProxy
                                     requestUri.IndexOf(".jpeg") != -1 ||
                                     requestUri.IndexOf(".woff") != -1;
         bool CanCacheRequest(HttpRequestMessage request) => request.Method == HttpMethod.Get && request.RequestUri.ToString().IndexOf("wp-admin") == -1;
+        
+        bool ShouldCacheResponse(HttpResponseMessage response) => 
+                                    (response.StatusCode == HttpStatusCode.OK || (int)response.StatusCode >= 400) &&
+                                    ((int)response.StatusCode <= 500);
+        
         bool IsTextMediaType(string mediaType) => 
                                     (mediaType.IndexOf("text") != -1 || 
                                      mediaType.IndexOf("json") != -1 || 
@@ -66,43 +73,47 @@ namespace BCC.WPProxy
                           mediaType.IndexOf("video") != -1 ||
                           mediaType.IndexOf("application") != -1;
 
+
         protected async override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var requestUri = request.RequestUri.ToString();
+            var proxyRequestHost = Context.HttpContext.Request.Host;
+            var proxyAddress = $"{Context.HttpContext.Request.Scheme}://{proxyRequestHost}";
+            var sourceAddress = Settings.SourceAddress;
 
             // Reroute access token requests
             if (IsAccessTokenRequest(requestUri))
             {
-                return new HttpResponseMessage { Content = new StringContent(await HttpContext.HttpContext.GetTokenAsync("access_token")) };
+                return new HttpResponseMessage { Content = new StringContent(await HttpContext.GetTokenAsync("access_token")) };
             }
             if (IsIdTokenRequest(requestUri))
             {
-                return new HttpResponseMessage { Content = new StringContent(await HttpContext.HttpContext.GetTokenAsync("id_token")) };
+                return new HttpResponseMessage { Content = new StringContent(await HttpContext.GetTokenAsync("id_token")) };
             }
             // Reroute logut
             if (IsLogoutRequest(requestUri))
             {
-                return Redirect($"/account/logout?returnUrl={WebUtility.UrlEncode(request.Headers.Referrer.ToString() ?? "/")}");
+                return Redirect($"{proxyAddress}/account/logout?returnUrl={WebUtility.UrlEncode(request.Headers.Referrer.ToString() ?? "/")}");
             }
 
             // Modify request headers (for authentication)
-            var wpUserId = (await UserService.MapToWpUserAsync(HttpContext.HttpContext.User)).ToString();
+            var wpUserId = (await UserService.MapToWpUserAsync(HttpContext.User)).ToString();
             request.Headers.Add("X-Wp-Proxy-User-Id", wpUserId);
             request.Headers.Add("X-Wp-Proxy-Key", Settings.ProxyKey);
-            request.Headers.Host = Settings.DestinationHost;
+            request.Headers.Host = Settings.SourceHost;
 
             // Determine if content can/should be cached
             var canCache = CanCacheRequest(request);
-            var isStaticContent = IsStaticContent(requestUri);
+            var isDynamicContent = !IsStaticContent(requestUri);
 
             // Determine cache key
-            var requestKey = canCache ? (request.RequestUri.ToString() + "|" + (isStaticContent ? 0 : wpUserId)) : null;            
+            var requestKey = canCache ? (request.RequestUri.ToString() + "|" + (isDynamicContent ? wpUserId: 0)) : null;            
             var cacheKey = canCache ? ComputeCacheKeyHash(requestKey) : null;
 
             // Load from cache
             if (canCache)
             {
-                var cachedResponse = await Cache.GetAsync<ResponseCacheItem>(cacheKey, refreshOnWPUpdate: !isStaticContent);
+                var cachedResponse = await Cache.GetAsync<ResponseCacheItem>(cacheKey, refreshOnWPUpdate: isDynamicContent);
                 if (cachedResponse != null)
                 {
                     return await cachedResponse.ToResponseMessage(FileStore);
@@ -110,49 +121,65 @@ namespace BCC.WPProxy
             }
 
             // Execute request
-            request.Version = new Version(1,1); // Backwards compatiblity for old servers
+            if (ShouldRedirectToNormalizedUrl(request, out string normalizedUrl))
+            {
+                return Redirect(normalizedUrl);
+            }
             var response = await base.SendAsync(request, cancellationToken);
 
             // Handle depending on media type
             var mediaType = response.Content?.Headers?.ContentType?.MediaType ?? "";
             if (IsTextMediaType(mediaType))
             {
-                // Read content and transform content (replace destination address with proxy address)
-                var content = TransformResponseContent(await response.Content.ReadAsStringAsync());                
-                response.Content = new StringContent(content, Encoding.UTF8, response.Content.Headers.ContentType.MediaType);
+                // Text content (documents, json responses etc.) may contain references to 
+                // the destination/source address and the content may need to be transformed to
+                // replace these references with the proxy's address
+
+                // Read content and transform content (replace source address with proxy address)
+                var contentBuilder = new StringBuilder(await response.Content.ReadAsStringAsync());
+                RewriteUrls(contentBuilder, sourceAddress, proxyAddress);
+                var contentString = contentBuilder.ToString();
+                response.Content = new StringContent(contentString, Encoding.UTF8, response.Content.Headers.ContentType.MediaType);
                 
-                // Cache content
-                if (canCache &&
-                    (response.StatusCode == HttpStatusCode.OK || (int)response.StatusCode >= 400)
-                    && (int)response.StatusCode <= 500)
+                // Cache content if response is valid for caching
+                if (canCache && ShouldCacheResponse(response))
                 {
                     // Cache Item (if not already cached)
-                    await Cache.GetOrCreateAsync(cacheKey, () => Task.FromResult(ResponseCacheItem.ForTextContent(response, content)), refreshOnWPUpdate: true);
+                    await Cache.GetOrCreateAsync(cacheKey, () => Task.FromResult(ResponseCacheItem.ForTextContent(response, contentString)), refreshOnWPUpdate: true);
                 }
             } 
             else if (IsMultimediaMediaType(mediaType))
             {
-                // Save file to disk
-                var contentHeaders = response.Content.Headers;
-                var content = await response.Content.ReadAsStreamAsync();
-                var ms = new MemoryStream();
-                await content.CopyToAsync(ms);
-                ms.Position = 0;
-                var storageKey = Settings.DestinationHost.Replace(":","-") + "-" + cacheKey;
-                await FileStore.WriteFileAsync(storageKey, ms);
-                ms.Position = 0;
-                response.Content = new StreamContent(ms);
-                foreach (var header in contentHeaders)
+                // Check if response should be cached (e.g not a 500 response or similar)
+                if (canCache && ShouldCacheResponse(response))
                 {
-                    response.Content.Headers.Add(header.Key, header.Value);
+                    // Read content stream to memory
+                    var contentHeaders = response.Content.Headers;
+                    var content = await response.Content.ReadAsStreamAsync();
+                    var ms = new MemoryStream();
+                    await content.CopyToAsync(ms);
+
+                    // Save memory stream to disk/storage cache
+                    ms.Position = 0;
+                    var storageKey = $"{Settings.SourceHost}/{cacheKey}";
+                    await FileStore.WriteFileAsync(storageKey, ms);
+
+                    // Create cache entry which references disk/storage
+                    await Cache.GetOrCreateAsync(cacheKey, () => Task.FromResult(
+                            ResponseCacheItem.ForStreamContent(response, storageKey)),
+                            TimeSpan.FromMinutes(15),
+                            refreshOnWPUpdate: isDynamicContent
+                    );
+
+                    // Link response to memory stream
+                    ms.Position = 0;
+                    response.Content = new StreamContent(ms);
+                    foreach (var header in contentHeaders)
+                    {
+                        response.Content.Headers.Add(header.Key, header.Value);
+                    }
                 }
 
-                // Create cache entry
-                await Cache.GetOrCreateAsync(cacheKey, () => Task.FromResult(
-                        ResponseCacheItem.ForStreamContent(response, storageKey)), 
-                        TimeSpan.FromMinutes(15),
-                        refreshOnWPUpdate: !isStaticContent
-                );
             }
 
 
@@ -164,10 +191,6 @@ namespace BCC.WPProxy
         private HttpResponseMessage Redirect(string url)
         {
             var response = new HttpResponseMessage();
-            if (!url.StartsWith("http"))
-            {
-                url = Settings.ProxyAddress + "/" + url.TrimStart('/');
-            }
             response.StatusCode = HttpStatusCode.Redirect;
             response.Headers.Location = new Uri(url);
             return response;
@@ -190,47 +213,59 @@ namespace BCC.WPProxy
             }
         }
 
+        protected bool ShouldRedirectToNormalizedUrl(HttpRequestMessage request, out string normalizedUrl)
+        {
+            normalizedUrl = null;
+
+            // Fix double slashes
+            if (request.RequestUri.PathAndQuery.IndexOf("//") != -1)
+            {
+                var normalizedPathAndQuery = request.RequestUri.PathAndQuery.Replace("//", "/");
+                normalizedUrl = $"{request.RequestUri.Scheme}://{request.RequestUri.Host}{normalizedPathAndQuery}";
+                return true;
+            }
+            return false;
+        }
+
         /// <summary>
         /// Transform content by replacing source addresses with proxy addresses etc.
         /// </summary>
         /// <param name="sourceContent"></param>
         /// <returns></returns>
-        protected string TransformResponseContent(string sourceContent)
+        protected StringBuilder RewriteUrls(StringBuilder sourceContent, string originalBaseAddress, string newBaseAddress)
         {
+            var encodedOriginalBaseAddress = WebUtility.UrlEncode(originalBaseAddress);
+            var encodedNewBaseAddress = WebUtility.UrlEncode(newBaseAddress);
+
             var result = sourceContent
-                    .Replace(Settings.DestinationAddress, Settings.ProxyAddress)
-                    .Replace(Settings.DestinationAddress.Replace("/", "\\/"), Settings.ProxyAddress.Replace("/", "\\/"))
+                    .Replace(originalBaseAddress, newBaseAddress)
+                    .Replace(encodedOriginalBaseAddress, encodedNewBaseAddress)
+                    .Replace(originalBaseAddress.Replace("/", "\\/"), newBaseAddress.Replace("/", "\\/"))
                     .Replace("http://", "https://");
 
-            if (Settings.WwwDestinationAddress != Settings.ProxyAddress)
+            var altOriginalBaseAddress = originalBaseAddress.Contains("://www.") ? originalBaseAddress.Replace("://www.", "://") : originalBaseAddress.Replace("://", "://www.");
+            if (altOriginalBaseAddress != newBaseAddress)
             {
+                var encodedAltDestinationAddress = WebUtility.UrlEncode(altOriginalBaseAddress);
                 result = result
-                    .Replace(Settings.WwwDestinationAddress, Settings.ProxyAddress)
-                    .Replace(Settings.WwwDestinationAddress.Replace("/", "\\/"), Settings.ProxyAddress.Replace("/", "\\/"))
+                    .Replace(altOriginalBaseAddress, newBaseAddress)
+                    .Replace(encodedAltDestinationAddress, encodedNewBaseAddress)
+                    .Replace(altOriginalBaseAddress.Replace("/", "\\/"), newBaseAddress.Replace("/", "\\/"))
                     .Replace("http://", "https://");
             }
-            return result;
+            return sourceContent;
         }
 
         /// <summary>
         /// Transform request headers so that they are compatible with the proxy
         /// </summary>
         /// <param name="request"></param>
-        protected void TransformResponseHeaders(HttpResponseMessage response)
+        protected void RewriteRedirectUrls(HttpResponseMessage response, string sourceAddress, string proxyAddress)
         {
-            // Transform response headers
+            // Transform response headers (ensure that redirects go back to the proxy instead of the destination/source)
             if (response.Headers.Location != null)
             {
-                response.Headers.Location = new Uri(response.Headers.Location.ToString()
-                    .Replace(Settings.DestinationAddress, Settings.ProxyAddress)
-                    .Replace(WebUtility.UrlEncode(Settings.DestinationAddress), WebUtility.UrlEncode(Settings.ProxyAddress)));
-
-                if (Settings.WwwDestinationAddress != Settings.ProxyAddress)
-                {
-                    response.Headers.Location = new Uri(response.Headers.Location.ToString()
-                         .Replace(Settings.WwwDestinationAddress, Settings.ProxyAddress)
-                         .Replace(WebUtility.UrlEncode(Settings.WwwDestinationAddress), WebUtility.UrlEncode(Settings.ProxyAddress)));
-                }
+                response.Headers.Location = new Uri(RewriteUrls(new StringBuilder(response.Headers.Location.ToString()), sourceAddress, proxyAddress).ToString());
             }
 
         }

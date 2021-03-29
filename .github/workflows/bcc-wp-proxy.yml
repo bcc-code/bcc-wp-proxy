@@ -93,8 +93,7 @@ jobs:
           --allow-unauthenticated \
           --platform managed \
           --update-env-vars GCP_ProjectID=${{ secrets.GCLOUD_PROJECT }} \
-          --update-env-vars WPProxy__DestinationAddress=${{ secrets.PROXY_DESTINATION_ADDRESS }} \
-          --update-env-vars WPProxy__ProxyAddress=${{ secrets.PROXY_ADDRESS }} \
+          --update-env-vars WPProxy__SourceAddress=${{ secrets.PROXY_SOURCE_ADDRESS }} \
           --update-env-vars WPProxy__UseRedis=true \
           --update-env-vars WPProxy__RedisInstanceName=${{ secrets.PROXY_REDIS_INSTANCE_NAME }} \
           --update-env-vars WPProxy__RedisIpAddress=${{ secrets.PROXY_REDIS_IP_ADDRESS }} \
@@ -105,4 +104,3 @@ jobs:
           --update-env-vars Authentication__ClientId=${{ secrets.AUTH_CLIENT_ID }} \
           --update-env-vars Authentication__ClientSecret=${{ secrets.AUTH_CLIENT_SECRET }} \
           --update-env-vars ApplicationInsights__ConnectionString=${{ secrets.APPINSIGHTS_CONNECTION_STRING }} \
-

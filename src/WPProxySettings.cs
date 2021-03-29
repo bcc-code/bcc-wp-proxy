@@ -9,17 +9,35 @@ namespace BCC.WPProxy
     public class WPProxySettings
     {
         public const string AuthorizationPolicy = "wp-proxy";
-        public string DestinationAddress { get; set; }
 
-        public string WwwDestinationAddress => DestinationAddress.Replace("://", "://www.");
+        public string SourceAddress { get; set; }
 
-        public TimeSpan CacheDefaultSlidingExpiration { get; set; } = TimeSpan.FromMinutes(10);
 
+        /// <summary>
+        /// Sliding expiration for retreiving content from source
+        /// </summary>
+        public TimeSpan CacheDefaultSlidingExpiration { get; set; } = TimeSpan.FromMinutes(60);
+
+        /// <summary>
+        /// Absolute max time to cache content before retreiving from source again
+        /// </summary>
         public TimeSpan CacheDefaultAbsoluteExpiration { get; set; } = TimeSpan.FromHours(6);
 
-        public TimeSpan ImageMemoryCacheSlidingExpiration { get; set; } = TimeSpan.FromMinutes(60);
+        /// <summary>
+        /// Sliding expiration for retreiving image/multimedia content from source
+        /// </summary>
+        public TimeSpan MultimediaMemoryCacheSlidingExpiration { get; set; } = TimeSpan.FromMinutes(60);
 
-        public int ImageMemoryCacheMaxSizeInBytes { get; set; } = 250000; //250kb
+        /// <summary>
+        /// Max size of multimedia items to store in distributed memory cache (instead of just disk storage).
+        /// This setting essentially affects use of Redis memory
+        /// </summary>
+        public int MultimediaMemoryCacheMaxSizeInBytes { get; set; } = 250000; //250kb
+
+        /// <summary>
+        /// How often to check for content updates in WordPress (used to invalidate cache)
+        /// </summary>
+        public TimeSpan CacheContentUpdateCheckInterval { get; set; } = TimeSpan.FromSeconds(15);
 
         public bool UseRedis { get; set; } = false;
 
@@ -43,37 +61,20 @@ namespace BCC.WPProxy
 
         public string CountryClaimType { get; set; }
 
-        private string _destinationHost;
+        private string _sourceHost;
 
 
-        public string DestinationHost
+        public string SourceHost
         {
             get
             {
-                if (_destinationHost == null)
+                if (_sourceHost == null)
                 {
-                    _destinationHost = DestinationAddress.Replace("https://", "").Replace("http://", "").Trim('/');
+                    _sourceHost = SourceAddress.Replace("https://", "").Replace("http://", "").Trim('/');
                 }
-                return _destinationHost;
+                return _sourceHost;
             }
         }
 
-        private string _proxyHost;
-
-
-        public string ProxyHost
-        {
-            get
-            {
-                if (_proxyHost == null)
-                {
-                    _proxyHost = ProxyAddress?.Replace("https://", "").Replace("http://", "").Trim('/');
-                }
-                return _proxyHost;
-            }
-        }
-
-
-        public string ProxyAddress { get; set; }
     }
 }

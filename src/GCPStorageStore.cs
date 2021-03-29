@@ -53,12 +53,12 @@ namespace BCC.WPProxy
                 await _client.DownloadObjectAsync(Settings.GoogleStorageBucket, name, ms);
                 ms.Position = 0;
 
-                if (ms.Length <= Settings.ImageMemoryCacheMaxSizeInBytes)
+                if (ms.Length <= Settings.MultimediaMemoryCacheMaxSizeInBytes)
                 {
                     // Save to memory cache
                     await DistributedCache.SetAsync(name, ms.ToArray(), new DistributedCacheEntryOptions
                     {
-                        SlidingExpiration = Settings.ImageMemoryCacheSlidingExpiration
+                        SlidingExpiration = Settings.MultimediaMemoryCacheSlidingExpiration
                     });
                     ms.Position = 0;
                 }
@@ -77,11 +77,11 @@ namespace BCC.WPProxy
                 await fileStream.CopyToAsync(ms);
                 ms.Position = 0;
 
-                if (ms.Length <= Settings.ImageMemoryCacheMaxSizeInBytes)
+                if (ms.Length <= Settings.MultimediaMemoryCacheMaxSizeInBytes)
                 {
                     await DistributedCache.SetAsync(name, ms.ToArray(), new DistributedCacheEntryOptions
                     {
-                        SlidingExpiration = Settings.ImageMemoryCacheSlidingExpiration
+                        SlidingExpiration = Settings.MultimediaMemoryCacheSlidingExpiration
                     });
                     ms.Position = 0;
                 }   

@@ -20,7 +20,7 @@ namespace BCC.WPProxy
 
         public async Task<T> GetAsync<T>(string relativePath)
         {
-            var uri = $"{Settings.DestinationAddress}/wp-json/bcc-wp-proxy/v1/{relativePath}";
+            var uri = $"{Settings.SourceAddress}/wp-json/bcc-wp-proxy/v1/{relativePath}";
 
             var client = ClientFactory.CreateClient();
             var request = new HttpRequestMessage

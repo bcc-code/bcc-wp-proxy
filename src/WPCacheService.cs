@@ -10,6 +10,11 @@ using System.Threading.Tasks;
 
 namespace BCC.WPProxy
 {
+ 
+    /// <summary>
+    /// The WPCacheService provides a memory cache (with fallback to a distributed memory cache) for text content.
+    /// The cache service also regularly checks for content updates from WordPress which are used to invalidate the cache.
+    /// </summary>
     public class WPCacheService
     {
         public WPCacheService(IMemoryCache memoryCache, IDistributedCache distributedCache, WPProxySettings settings, WPApiClient client)
@@ -201,7 +206,7 @@ namespace BCC.WPProxy
         {
             // Check if content has changed max every 5 seconds
             var checkInterval = TimeSpan.FromSeconds(5);
-            var cacheKey = $"{Settings.DestinationAddress}|wp-timestamp";
+            var cacheKey = $"{Settings.SourceAddress}|wp-timestamp";
             var wpUpdated = await GetOrCreateAsync(cacheKey, async () =>
             {
                 var wpTimestamp = await Wordpress.GetAsync<long>("last-updated");

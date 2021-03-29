@@ -178,21 +178,6 @@ namespace bcc_wp_proxy
             app.UseAuthentication();
             app.UseAuthorization();
 
-            //app.UseEndpoints(endpoints => {
-            //    endpoints.MapDefaultControllerRoute();
-
-            //    endpoints.MapReverseProxy();
-            //});
-
-
-            //app.Use(async (context, next) =>
-            //{
-            //    Endpoint endpoint = context.GetEndpoint();
-
-            //    await next();
-            //});
-
-
             app.Use(next => context =>
             {
                 // Force https scheme (since request inside a docker container may appear to be http)
@@ -201,19 +186,22 @@ namespace bcc_wp_proxy
             });
 
             var transformer = new WPRequestTransformer(); // or HttpTransformer.Default;
-            var requestOptions = new RequestProxyOptions { Timeout = TimeSpan.FromSeconds(100) };
+            var requestOptions = new RequestProxyOptions { 
+                Timeout = TimeSpan.FromSeconds(100),
+                Version = new Version(1,1), // Not all servers support HTTP 2
+                VersionPolicy = HttpVersionPolicy.RequestVersionOrHigher            
+            };
             app.UseEndpoints(endpoints =>
             {
                 // Dont't authenticate manifest.json
                 endpoints.Map("/manifest.json", async httpContext => //
                 {
-                    await httpProxy.ProxyAsync(httpContext, settings.DestinationAddress, messageInvoker.Create(), requestOptions, transformer);
+                    await httpProxy.ProxyAsync(httpContext, settings.SourceAddress, messageInvoker.Create(), requestOptions, transformer);
                 });
 
                 endpoints.Map("/{**catch-all}", async httpContext => //
                 {
-
-                    await httpProxy.ProxyAsync(httpContext, settings.DestinationAddress, messageInvoker.Create(), requestOptions, transformer);
+                    await httpProxy.ProxyAsync(httpContext, settings.SourceAddress, messageInvoker.Create(), requestOptions, transformer);
 
                     var errorFeature = httpContext.Features.Get<IProxyErrorFeature>();
                     if (errorFeature != null)

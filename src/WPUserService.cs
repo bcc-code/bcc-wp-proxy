@@ -27,7 +27,7 @@ namespace BCC.WPProxy
             {
                 return Task.FromResult(0);
             }
-            return Cache.GetOrCreateAsync($"{Settings.DestinationAddress}|wp-user|{userId}", async () =>
+            return Cache.GetOrCreateAsync($"{Settings.SourceAddress}|wp-user|{userId}", async () =>
             {
                 var userEmail = user.FindFirst(ClaimTypes.Email)?.Value;
                 var userLogin = user.FindFirst(Settings.UserLoginClaimType)?.Value;
@@ -49,7 +49,7 @@ namespace BCC.WPProxy
 
         private Task<List<WPUser>> GetWPUsersAsync()
         {
-            return Cache.GetOrCreateAsync($"{Settings.DestinationAddress}|wp-users", () => WPApi.GetAsync<List<WPUser>>("users"), TimeSpan.FromMinutes(5));
+            return Cache.GetOrCreateAsync($"{Settings.SourceAddress}|wp-users", () => WPApi.GetAsync<List<WPUser>>("users"), TimeSpan.FromMinutes(5));
         }        
     }
 

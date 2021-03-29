@@ -34,7 +34,13 @@ namespace BCC.WPProxy
 
         public async Task WriteFileAsync(string name, Stream fileStream)
         {
-            using (var writeStream = File.OpenWrite(FileProvider.GetFileInfo(name).PhysicalPath))
+            var file = FileProvider.GetFileInfo(name);
+            var directory = Path.GetDirectoryName(file.PhysicalPath);
+            if (!Directory.Exists(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+            using (var writeStream = File.OpenWrite(file.PhysicalPath))
             {
                 await fileStream.CopyToAsync(writeStream);
                 await writeStream.FlushAsync();
