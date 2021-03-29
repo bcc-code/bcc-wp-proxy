@@ -133,7 +133,16 @@ namespace BCC.WPProxy
             //}
 
             // Execute request
+            if (canCache)
+            {
+                request.Headers.Remove("cookie");
+            }
             var response = await base.SendAsync(request, cancellationToken);
+            if (canCache)
+            {
+                response.Headers.Remove("cookie");
+                response.Headers.Remove("set-cookie");
+            }
             if (response.StatusCode == HttpStatusCode.Unauthorized)
             {
                 return RedirectToLogin();
@@ -316,17 +325,7 @@ namespace BCC.WPProxy
                     Url = response.RequestMessage.RequestUri.ToString(),
                     Version = response.Version
                 };
-                foreach (var header in response.Headers)
-                {
-                    if (!header.Key.Equals("Set-Cookie", StringComparison.OrdinalIgnoreCase))
-                    {
-                        itm.Headers[header.Key] = header.Value.ToArray();
-                    }
-                }
-                foreach (var header in response.Content.Headers)
-                {
-                    itm.ContentHeaders[header.Key] = header.Value.ToArray();
-                }
+                SaveResponseHeaders(response, itm);
                 return itm;
             }
 
@@ -343,18 +342,24 @@ namespace BCC.WPProxy
                     Url = response.RequestMessage.RequestUri.ToString(),
                     Version = response.Version
                 };
+                SaveResponseHeaders(response, itm);
+                return itm;
+            }
+
+            static void SaveResponseHeaders(HttpResponseMessage response, ResponseCacheItem itm)
+            {
                 foreach (var header in response.Headers)
                 {
-                    if (!header.Key.Equals("Set-Cookie", StringComparison.OrdinalIgnoreCase))
+                    if (!header.Key.Equals("Set-Cookie", StringComparison.OrdinalIgnoreCase) && !header.Key.Equals("cookie", StringComparison.OrdinalIgnoreCase))
                     {
                         itm.Headers[header.Key] = header.Value.ToArray();
                     }
+
                 }
                 foreach (var header in response.Content.Headers)
                 {
-                    itm.ContentHeaders[header.Key] = header.Value.ToArray();                    
+                    itm.ContentHeaders[header.Key] = header.Value.ToArray();
                 }
-                return itm;
             }
 
             public async Task<HttpResponseMessage> ToResponseMessage(IFileStore fileStore)
