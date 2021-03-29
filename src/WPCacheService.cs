@@ -205,7 +205,7 @@ namespace BCC.WPProxy
         private async Task<long> GetWPLastUpdatedAsync(CancellationToken cancellation)
         {
             // Check if content has changed max every 5 seconds
-            var checkInterval = TimeSpan.FromSeconds(5);
+            var checkInterval = Settings.CacheContentUpdateCheckInterval;
             var cacheKey = $"{Settings.SourceAddress}|wp-timestamp";
             var wpUpdated = await GetOrCreateAsync(cacheKey, async () =>
             {

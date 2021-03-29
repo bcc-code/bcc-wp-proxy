@@ -53,6 +53,12 @@ namespace BCC.WPProxy
                                     requestUri.IndexOf(".jpg") != -1 ||
                                     requestUri.IndexOf(".jpeg") != -1 ||
                                     requestUri.IndexOf(".woff") != -1;
+
+        bool IsScript(string requestUri) =>
+                                    requestUri.IndexOf(".js") != -1 ||
+                                    requestUri.IndexOf(".css") != -1;
+
+
         bool CanCacheRequest(HttpRequestMessage request) => request.Method == HttpMethod.Get && request.RequestUri.ToString().IndexOf("wp-admin") == -1;
         
         bool ShouldCacheResponse(HttpResponseMessage response) => 
@@ -105,6 +111,7 @@ namespace BCC.WPProxy
             // Determine if content can/should be cached
             var canCache = CanCacheRequest(request);
             var isDynamicContent = !IsStaticContent(requestUri);
+            var isScript = IsScript(requestUri);
 
             // Determine cache key
             var requestKey = canCache ? (request.RequestUri.ToString() + "|" + (isDynamicContent ? wpUserId: 0)) : null;            
@@ -113,7 +120,7 @@ namespace BCC.WPProxy
             // Load from cache
             if (canCache)
             {
-                var cachedResponse = await Cache.GetAsync<ResponseCacheItem>(cacheKey, refreshOnWPUpdate: isDynamicContent);
+                var cachedResponse = await Cache.GetAsync<ResponseCacheItem>(cacheKey, refreshOnWPUpdate: isDynamicContent || isScript);
                 if (cachedResponse != null)
                 {
                     return await cachedResponse.ToResponseMessage(FileStore);
