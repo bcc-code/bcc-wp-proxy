@@ -208,6 +208,7 @@ namespace bcc_wp_proxy
                     {
                         var error = errorFeature.Error;
                         var exception = errorFeature.Exception;
+                        throw errorFeature.Exception;
                     }
                 })
                 .RequireAuthorization(WPProxySettings.AuthorizationPolicy);

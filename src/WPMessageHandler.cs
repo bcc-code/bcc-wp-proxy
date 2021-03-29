@@ -97,8 +97,8 @@ namespace BCC.WPProxy
             }
 
             // Modify request headers (for authentication)
-            var wpUserId = (await UserService.MapToWpUserAsync(HttpContext.User)).ToString();
-            request.Headers.Add("X-Wp-Proxy-User-Id", wpUserId);
+            var wpUserId = await UserService.MapToWpUserAsync(HttpContext.User);
+            request.Headers.Add("X-Wp-Proxy-User-Id", wpUserId.ToString());
             request.Headers.Add("X-Wp-Proxy-Key", Settings.ProxyKey);
             request.Headers.Host = Settings.SourceHost;
 
@@ -121,11 +121,15 @@ namespace BCC.WPProxy
             }
 
             // Execute request
-            if (ShouldRedirectToNormalizedUrl(request, out string normalizedUrl))
+            if (ShouldRedirectToNormalizedUrl(request, proxyAddress, out string normalizedUrl))
             {
                 return Redirect(normalizedUrl);
             }
             var response = await base.SendAsync(request, cancellationToken);
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                return RedirectToLogin();
+            }
 
             // Handle depending on media type
             var mediaType = response.Content?.Headers?.ContentType?.MediaType ?? "";
@@ -187,7 +191,13 @@ namespace BCC.WPProxy
 
         }
 
-      
+
+        private HttpResponseMessage RedirectToLogin()
+        {
+            return Redirect($"{HttpContext.Request.Scheme}://{HttpContext.Request.Host}/account/login?returnUrl={WebUtility.UrlEncode(HttpContext.Request.ToString())}");
+        }
+
+
         private HttpResponseMessage Redirect(string url)
         {
             var response = new HttpResponseMessage();
@@ -213,7 +223,7 @@ namespace BCC.WPProxy
             }
         }
 
-        protected bool ShouldRedirectToNormalizedUrl(HttpRequestMessage request, out string normalizedUrl)
+        protected bool ShouldRedirectToNormalizedUrl(HttpRequestMessage request, string proxyAddress, out string normalizedUrl)
         {
             normalizedUrl = null;
 
@@ -221,7 +231,7 @@ namespace BCC.WPProxy
             if (request.RequestUri.PathAndQuery.IndexOf("//") != -1)
             {
                 var normalizedPathAndQuery = request.RequestUri.PathAndQuery.Replace("//", "/");
-                normalizedUrl = $"{request.RequestUri.Scheme}://{request.RequestUri.Host}{normalizedPathAndQuery}";
+                normalizedUrl = $"{proxyAddress}{normalizedPathAndQuery}";
                 return true;
             }
             return false;

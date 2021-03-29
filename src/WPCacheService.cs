@@ -209,7 +209,7 @@ namespace BCC.WPProxy
             var cacheKey = $"{Settings.SourceAddress}|wp-timestamp";
             var wpUpdated = await GetOrCreateAsync(cacheKey, async () =>
             {
-                var wpTimestamp = await Wordpress.GetAsync<long>("last-updated");
+                long wpTimestamp = await Wordpress.GetAsync<long>("last-updated");
                 return new WPContentUpdated
                 {
                     LastCheck = DateTimeOffset.Now,
