@@ -194,6 +194,8 @@ namespace BCC.WPProxy
 
             }
 
+            RewriteRedirectUrls(response, sourceAddress, proxyAddress);
+
 
             return response;
 
