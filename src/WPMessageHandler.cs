@@ -67,10 +67,10 @@ namespace BCC.WPProxy
         
         bool IsTextMediaType(string mediaType) => 
                                     (mediaType.IndexOf("text") != -1 || 
-                                     mediaType.IndexOf("json") != -1 || 
-                                     mediaType.IndexOf("xml") != -1 || 
-                                     mediaType.IndexOf("javascript") != -1) &&
-                                     mediaType.IndexOf("image") == -1;
+                                     mediaType.IndexOf("json") != -1 ||
+                                     mediaType.IndexOf("xml") != -1 // || 
+                                     // mediaType.IndexOf("javascript") != -1
+                                    ) && mediaType.IndexOf("image") == -1;
 
         bool IsMultimediaMediaType(string mediaType) =>
                           mediaType.IndexOf("image") != -1 ||
