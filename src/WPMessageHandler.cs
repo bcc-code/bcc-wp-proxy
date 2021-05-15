@@ -45,6 +45,8 @@ namespace BCC.WPProxy
         bool IsIdTokenRequest(string requestPath) => requestPath.Contains("id-token.php");
         bool IsLogoutRequest(string requestPath) => requestPath.Contains("action=logout");
 
+        bool IsLoginRequest(string requestPath) => requestPath.Contains("wp-login.php");
+
         bool IsRootUrl(string requestPath) => requestPath.Trim('/') == "";
 
         bool IsStaticContent(string requestUri) => 
@@ -102,10 +104,20 @@ namespace BCC.WPProxy
             {
                 return new HttpResponseMessage { Content = new StringContent(await HttpContext.GetTokenAsync("id_token")) };
             }
-            // Reroute logut
+            // Reroute logout
             if (IsLogoutRequest(requestPath))
             {
                 return Redirect($"{proxyAddress}/account/logout?returnUrl={WebUtility.UrlEncode(request.Headers.Referrer.ToString() ?? "/")}");
+            }
+
+            // Reroute login request to target url (sometimes users are redirected to login if the auth cookie has only just been set)
+            if (IsLoginRequest(requestPath))
+            {
+                var redirectUri = GetQueryParameter(request.RequestUri.Query, "redirect_to");
+                if (!string.IsNullOrEmpty(redirectUri))
+                {
+                    return Redirect(WebUtility.UrlDecode(redirectUri));
+                }
             }
 
             // Redirect to previously selected language
@@ -230,7 +242,24 @@ namespace BCC.WPProxy
             return response;
 
         }
+        
 
+        private string GetQueryParameter(string querystring, string key)
+        {
+            if (!string.IsNullOrEmpty(querystring))
+            {
+                var kvs = querystring.TrimStart('?').Split('&');
+                foreach (var kv in kvs)
+                {
+                    var kvparts = kv.Split('=');
+                    if (kvparts.Length == 2 && kvparts[0].Equals(key, StringComparison.InvariantCultureIgnoreCase))
+                    {
+                        return kvparts[1];
+                    }
+                }
+            }
+            return null;
+        }
   
 
         private HttpResponseMessage SetLanguageCookies(HttpResponseMessage response, HttpRequestMessage request)
