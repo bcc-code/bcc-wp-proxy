@@ -12,6 +12,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authentication;
 using System.Security.Cryptography;
+using System.Globalization;
 
 namespace BCC.WPProxy
 {
@@ -40,9 +41,12 @@ namespace BCC.WPProxy
 
         public HttpContext HttpContext => Context.HttpContext;
 
-        bool IsAccessTokenRequest(string requestUri) => requestUri.Contains("access-token.php");
-        bool IsIdTokenRequest(string requestUri) => requestUri.Contains("id-token.php");
-        bool IsLogoutRequest(string requestUri) => requestUri.Contains("action=logout");
+        bool IsAccessTokenRequest(string requestPath) => requestPath.Contains("access-token.php");
+        bool IsIdTokenRequest(string requestPath) => requestPath.Contains("id-token.php");
+        bool IsLogoutRequest(string requestPath) => requestPath.Contains("action=logout");
+
+        bool IsRootUrl(string requestPath) => requestPath.Trim('/') == "";
+
         bool IsStaticContent(string requestUri) => 
                                     requestUri.IndexOf(".js") != -1 ||
                                     requestUri.IndexOf(".css") != -1 ||
@@ -69,7 +73,7 @@ namespace BCC.WPProxy
                                     (mediaType.IndexOf("text") != -1 || 
                                      mediaType.IndexOf("json") != -1 ||
                                      mediaType.IndexOf("xml") != -1 // || 
-                                     // mediaType.IndexOf("javascript") != -1
+                                     // mediaType.IndexOf("javascript") != -1 // creates problems for svgs loaded via js
                                     ) && mediaType.IndexOf("image") == -1;
 
         bool IsMultimediaMediaType(string mediaType) =>
@@ -83,23 +87,35 @@ namespace BCC.WPProxy
         protected async override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var requestUri = request.RequestUri.ToString();
+            var requestPath = request.RequestUri.PathAndQuery;
             var proxyRequestHost = Context.HttpContext.Request.Host;
             var proxyAddress = $"{Context.HttpContext.Request.Scheme}://{proxyRequestHost}";
             var sourceAddress = Settings.SourceAddress;
+            
 
             // Reroute access token requests
-            if (IsAccessTokenRequest(requestUri))
+            if (IsAccessTokenRequest(requestPath))
             {
                 return new HttpResponseMessage { Content = new StringContent(await HttpContext.GetTokenAsync("access_token")) };
             }
-            if (IsIdTokenRequest(requestUri))
+            if (IsIdTokenRequest(requestPath))
             {
                 return new HttpResponseMessage { Content = new StringContent(await HttpContext.GetTokenAsync("id_token")) };
             }
             // Reroute logut
-            if (IsLogoutRequest(requestUri))
+            if (IsLogoutRequest(requestPath))
             {
                 return Redirect($"{proxyAddress}/account/logout?returnUrl={WebUtility.UrlEncode(request.Headers.Referrer.ToString() ?? "/")}");
+            }
+
+            // Redirect to previously selected language
+            if (IsRootUrl(requestPath) && Settings.AutoLanguageRedirect && !(request.Headers.Referrer?.ToString() ?? "").StartsWith(proxyAddress))
+            {
+                var requestLanguageCookie = GetRequestLanguageCookie(request);
+                if (!string.IsNullOrEmpty(requestLanguageCookie) && requestLanguageCookie != Settings.DefaultLanguage)
+                {
+                    return Redirect($"{proxyAddress}/{requestLanguageCookie}");
+                }
             }
 
             // Modify request headers (for authentication)
@@ -109,8 +125,8 @@ namespace BCC.WPProxy
             request.Headers.Host = Settings.SourceHost;
 
             // Determine if content can/should be cached
-            var canCache = CanCacheRequest(request);
             var isDynamicContent = !IsStaticContent(requestUri);
+            var canCache = CanCacheRequest(request) || !isDynamicContent;            
             var isScript = IsScript(requestUri);
 
             // Determine cache key
@@ -120,29 +136,32 @@ namespace BCC.WPProxy
             // Load from cache
             if (canCache)
             {
-                var cachedResponse = await Cache.GetAsync<ResponseCacheItem>(cacheKey, refreshOnWPUpdate: isDynamicContent || isScript);
-                if (cachedResponse != null)
+                var responseCacheItem = await Cache.GetAsync<ResponseCacheItem>(cacheKey, refreshOnWPUpdate: isDynamicContent || isScript);
+                if (responseCacheItem != null)
                 {
-                    return await cachedResponse.ToResponseMessage(FileStore);
+                    var cachedResponse = await responseCacheItem.ToResponseMessage(FileStore);
+                    if (canCache)
+                    {
+                        SetLanguageCookies(cachedResponse, request);
+                    }
+                    return cachedResponse;
                 }
             }
-
-            //if (ShouldRedirectToNormalizedUrl(request, proxyAddress, out string normalizedUrl))
-            //{
-            //    return Redirect(normalizedUrl);
-            //}
 
             // Execute request
             if (canCache)
             {
+                // Remove cookie headers
                 request.Headers.Remove("cookie");
             }
             var response = await base.SendAsync(request, cancellationToken);
             if (canCache)
             {
+                // Remove cookie headers
                 response.Headers.Remove("cookie");
                 response.Headers.Remove("set-cookie");
             }
+
             if (response.StatusCode == HttpStatusCode.Unauthorized)
             {
                 return RedirectToLogin();
@@ -204,10 +223,74 @@ namespace BCC.WPProxy
             }
 
             RewriteRedirectUrls(response, sourceAddress, proxyAddress);
-
-
+            if (canCache && isDynamicContent)
+            {
+                SetLanguageCookies(response, request);
+            }
             return response;
 
+        }
+
+  
+
+        private HttpResponseMessage SetLanguageCookies(HttpResponseMessage response, HttpRequestMessage request)
+        {   
+            // Add cookie headers for language (if language has changed)
+            if (HttpContext.Request.Headers.ContainsKey("Referer"))
+            {
+                var previousLanuage = GetLanuageFromUri(new Uri(HttpContext.Request.Headers["Referer"].FirstOrDefault()));
+                var currentLanguage = GetLanuageFromUri(request.RequestUri);
+                if (currentLanguage != previousLanuage)
+                {
+                    var cookieExpiry = DateTime.Now.AddDays(7);
+                    var secondsToExpiry = (cookieExpiry - DateTime.Now).Seconds;
+                    response.Headers.Add("set-cookie", $"wp-wpml_current_language={currentLanguage}; Expires={cookieExpiry.ToString("R")}; Max-Age={secondsToExpiry}; Path=/; HttpOnly; SameSite=Lax;");
+                    response.Headers.Add("set-cookie", $"lang={currentLanguage}; Expires={cookieExpiry.ToString("R")}; Max-Age={secondsToExpiry}; Path=/; HttpOnly; SameSite=Lax;");
+                }
+            }
+            return response;
+        }
+
+        private string GetRequestLanguageCookie(HttpRequestMessage request)
+        {
+            // Get cookies sent by browse
+            var cookiesHeader = request.Headers.FirstOrDefault(h => h.Key.Equals("cookie", StringComparison.InvariantCultureIgnoreCase));
+
+            // Remove cookies (session cookies etc)
+            request.Headers.Remove("cookie");
+            var cookiesToKeep = new List<string>();
+
+            // Add language cookies back
+            if (cookiesHeader.Value != null)
+            {
+                foreach (var header in cookiesHeader.Value)
+                {
+                    var cookies = header.Split(';');
+                    foreach (var cookie in cookies)
+                    {
+                        var kv = cookie.Split('=').Select(s => s.Trim()).ToArray();
+                        if (kv.Length >= 2)
+                        {
+                            var k = kv[0];
+                            if (k == "wp-wpml_current_language" || k == "lang")
+                            {
+                                return kv[1];
+                            }
+                        }
+                    }
+                }
+            }
+            return null;
+        }
+
+        private string GetLanuageFromUri(Uri uri)
+        {
+            var path = uri.PathAndQuery.TrimStart('/');
+            if (path.Length > 2 && path[2] == '/')
+            {
+                return path.Substring(0, 2);
+            }
+            return Settings.DefaultLanguage;
         }
 
 

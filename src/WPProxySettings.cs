@@ -12,6 +12,10 @@ namespace BCC.WPProxy
 
         public string SourceAddress { get; set; }
 
+        public string DefaultLanguage = "no";
+
+        public bool AutoLanguageRedirect = true;
+
 
         /// <summary>
         /// Sliding expiration for retreiving content from source

@@ -87,7 +87,7 @@ jobs:
           
           gcloud run deploy ${{ secrets.GCLOUD_APP_NAME }} --image $IMAGE_ID:$VERSION \
           --project ${{ secrets.GCLOUD_PROJECT }} \
-          --region europe-north1 \
+          --region europe-west4 \ #europe-north1
           --vpc-connector ${{ secrets.GCLOUD_VPC_CONNECTOR_NAME }} \
           --port 80 \
           --allow-unauthenticated \
