@@ -234,7 +234,7 @@ namespace BCC.WPProxy
 
             }
 
-            RewriteRedirectUrls(response, sourceAddress, proxyAddress);
+            RewriteRedirectUrls(response, request, sourceAddress, proxyAddress);
             if (canCache && isDynamicContent)
             {
                 SetLanguageCookies(response, request);
@@ -401,12 +401,37 @@ namespace BCC.WPProxy
         /// Transform request headers so that they are compatible with the proxy
         /// </summary>
         /// <param name="request"></param>
-        protected void RewriteRedirectUrls(HttpResponseMessage response, string sourceAddress, string proxyAddress)
+        protected void RewriteRedirectUrls(HttpResponseMessage response, HttpRequestMessage request, string sourceAddress, string proxyAddress)
         {
             // Transform response headers (ensure that redirects go back to the proxy instead of the destination/source)
             if (response.Headers.Location != null)
             {
-                response.Headers.Location = new Uri(RewriteUrls(new StringBuilder(response.Headers.Location.ToString()), sourceAddress, proxyAddress).ToString());
+                var location = response.Headers.Location.ToString();
+                if (!location.StartsWith("http"))
+                {
+                    // Make relative urls absolute
+                    if (location.StartsWith('/'))
+                    {
+                        location = proxyAddress.TrimEnd('/') + location;
+                    }
+                    else
+                    {
+                        var currentUrl = request.RequestUri.ToString();
+                        if (currentUrl.IndexOf('/') != -1)
+                        {
+                            location = currentUrl.Substring(0, currentUrl.LastIndexOf('/') + 1) + location;
+                        }
+                        else
+                        {
+                            location = currentUrl + "/" + location;
+                        }
+                    }
+                }
+
+                // Replace source address with proxyaddress
+                location = RewriteUrls(new StringBuilder(location), sourceAddress, proxyAddress).ToString();
+                
+                response.Headers.Location = new Uri(location);
             }
 
         }
