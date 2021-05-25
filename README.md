@@ -20,7 +20,7 @@ The solutions consists of two parts:
 2. **Wordpress Plugin**
    * Tracks content changes (used for cache invalidation)
    * Makes last changed date and user account info available to the proxy
-   * Automatically authenticates users in WordPress based on user context passed via the proxy.
+   * Automatically authenticates users in WordPress based on user context passed from the proxy.
 
 Users are authenticated by the proxy, and are then mapped to either a specific (e.g. admin) or shared/global (e.g. "member") user in WordPress. By mapping multiple actual users to  shared/global accounts in WordPress, it is possible for different users to benefit from the same cache.
 
