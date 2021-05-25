@@ -25,3 +25,6 @@ The solutions consists of two parts:
 Users are authenticated by the proxy, and are then mapped to either a specific (e.g. admin) or shared/global (e.g. "member") user in WordPress. By mapping multiple actual users to  shared/global accounts in WordPress, it is possible for different users to benefit from the same cache.
 
 GET requests are typically cached, whereas post requests, or any request to a /wp-admin/* URL is not cached and is passed directly to the backend. WordPress is regularly polled for changes, and caches are invalidated when content is updated.
+
+The OpenID Connect / OAuth tokens retrieved by the proxy are made available for consumption by front-end scripts - allowing for personalized widgets without sacrificing a shared cache for content published from WordPress.
+
