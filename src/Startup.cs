@@ -24,6 +24,9 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.Extensions.FileProviders;
 using System.IO;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Primitives;
+using Microsoft.Net.Http.Headers;
 
 namespace bcc_wp_proxy
 {
@@ -87,7 +90,13 @@ namespace bcc_wp_proxy
                 });
             });
 
-            //services.ConfigureSameSiteNoneCookies();
+
+            services.Configure<CookiePolicyOptions>(options =>
+            {
+                // This lambda determines whether user consent for non-essential cookies is needed for a given request.
+                options.CheckConsentNeeded = context => true;
+                options.MinimumSameSitePolicy = SameSiteMode.None;
+            });
 
             services.AddAuthentication(options =>
             {
@@ -126,6 +135,26 @@ namespace bcc_wp_proxy
                {
                    context.ProtocolMessage.IssuerAddress =
                       $"{Configuration["Authentication:Authority"].TrimEnd('/')}/{Configuration["Authentication:LogoutEndpoint"].TrimStart('/')}";
+                   return Task.CompletedTask;
+               };
+
+               options.Events.OnRemoteFailure = context =>
+               {
+                   var log = context.HttpContext.RequestServices.GetService<ILogger<Startup>>();
+                   var errorMessage = "Login callback failed with following error: " + (context.Failure?.Message ?? "");
+                   var hasUserAgent = context.HttpContext.Request.Headers.TryGetValue(HeaderNames.UserAgent, out StringValues userAgent);
+                   if (hasUserAgent)
+                   {
+                       errorMessage += ". User Agent: " + userAgent.ToString();
+                   }
+                   var hasReferer = context.HttpContext.Request.Headers.TryGetValue(HeaderNames.Referer, out StringValues referer);
+                   if (hasReferer)
+                   {
+                       errorMessage += ". Referrer: " + referer.ToString();
+                   }
+
+                   log.LogError(context.Failure, errorMessage);
+
                    return Task.CompletedTask;
                };
 
@@ -175,8 +204,10 @@ namespace bcc_wp_proxy
 
             app.UseStaticFiles();
             app.UseRouting();
+            app.UseCookiePolicy();
             app.UseAuthentication();
             app.UseAuthorization();
+            
 
             app.Use(next => context =>
             {
