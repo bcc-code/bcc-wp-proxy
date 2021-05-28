@@ -94,6 +94,7 @@ namespace bcc_wp_proxy
             services.Configure<CookiePolicyOptions>(options =>
             {
                 options.MinimumSameSitePolicy = Microsoft.AspNetCore.Http.SameSiteMode.Unspecified;
+                options.Secure = CookieSecurePolicy.SameAsRequest;
                 options.OnAppendCookie = cookieContext => CheckSameSite(cookieContext.Context, cookieContext.CookieOptions);
                 options.OnDeleteCookie = cookieContext => CheckSameSite(cookieContext.Context, cookieContext.CookieOptions);
             });
