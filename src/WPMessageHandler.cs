@@ -18,7 +18,7 @@ namespace BCC.WPProxy
 {
     public class WPMessageHandler : DelegatingHandler
     {
-        public WPMessageHandler(IFileStore fileStore, IHttpContextAccessor httpContext, WPCacheService cache, WPUserService userService, WPProxySettings settings) : base(new SocketsHttpHandler()
+        public WPMessageHandler(IFileStore fileStore, IHttpContextAccessor httpContext, WPCacheService cache, WPUserService userService, WPProxySettings settings, WPProxySiteSettingsAccessor siteSettings) : base(new SocketsHttpHandler()
         {
             UseProxy = false,
             AllowAutoRedirect = false,
@@ -31,6 +31,7 @@ namespace BCC.WPProxy
             Cache = cache;
             UserService = userService;
             Settings = settings;
+            SiteSettings = siteSettings;
         }
 
         public IFileStore FileStore { get; }
@@ -38,6 +39,7 @@ namespace BCC.WPProxy
         public WPCacheService Cache { get; }
         public WPUserService UserService { get; }
         public WPProxySettings Settings { get; }
+        public WPProxySiteSettingsAccessor SiteSettings { get; }
 
         public HttpContext HttpContext => Context.HttpContext;
 
@@ -92,7 +94,8 @@ namespace BCC.WPProxy
             var requestPath = request.RequestUri.PathAndQuery;
             var proxyRequestHost = Context.HttpContext.Request.Host;
             var proxyAddress = $"{Context.HttpContext.Request.Scheme}://{proxyRequestHost}";
-            var sourceAddress = Settings.SourceAddress;
+            var siteSettings = SiteSettings.Current;
+            var sourceAddress = siteSettings.SourceAddress;
             
 
             // Reroute access token requests
@@ -121,10 +124,10 @@ namespace BCC.WPProxy
             }
 
             // Redirect to previously selected language
-            if (IsRootUrl(requestPath) && Settings.AutoLanguageRedirect && !(request.Headers.Referrer?.ToString() ?? "").StartsWith(proxyAddress))
+            if (IsRootUrl(requestPath) && siteSettings.AutoLanguageRedirect && !(request.Headers.Referrer?.ToString() ?? "").StartsWith(proxyAddress))
             {
                 var requestLanguageCookie = GetRequestLanguageCookie(request);
-                if (!string.IsNullOrEmpty(requestLanguageCookie) && requestLanguageCookie != Settings.DefaultLanguage)
+                if (!string.IsNullOrEmpty(requestLanguageCookie) && requestLanguageCookie != siteSettings.DefaultLanguage)
                 {
                     return Redirect($"{proxyAddress}/{requestLanguageCookie}");
                 }
@@ -134,7 +137,7 @@ namespace BCC.WPProxy
             var wpUserId = await UserService.MapToWpUserAsync(HttpContext.User);
             request.Headers.Add("X-Wp-Proxy-User-Id", wpUserId.ToString());
             request.Headers.Add("X-Wp-Proxy-Key", Settings.ProxyKey);
-            request.Headers.Host = Settings.SourceHost;
+            request.Headers.Host = siteSettings.SourceHost;
 
             // Determine if content can/should be cached
             var isDynamicContent = !IsStaticContent(requestUri);
@@ -154,7 +157,7 @@ namespace BCC.WPProxy
                     var cachedResponse = await responseCacheItem.ToResponseMessage(FileStore);
                     if (canCache)
                     {
-                        SetLanguageCookies(cachedResponse, request);
+                        SetLanguageCookies(cachedResponse, request, siteSettings.DefaultLanguage);
                     }
                     return cachedResponse;
                 }
@@ -213,7 +216,7 @@ namespace BCC.WPProxy
 
                     // Save memory stream to disk/storage cache
                     ms.Position = 0;
-                    var storageKey = $"{Settings.SourceHost}/{cacheKey}";
+                    var storageKey = $"{siteSettings.SourceHost}/{cacheKey}";
                     await FileStore.WriteFileAsync(storageKey, ms);
 
                     // Create cache entry which references disk/storage
@@ -237,7 +240,7 @@ namespace BCC.WPProxy
             RewriteRedirectUrls(response, request, sourceAddress, proxyAddress);
             if (canCache && isDynamicContent)
             {
-                SetLanguageCookies(response, request);
+                SetLanguageCookies(response, request, siteSettings.DefaultLanguage);
             }
             return response;
 
@@ -262,13 +265,13 @@ namespace BCC.WPProxy
         }
   
 
-        private HttpResponseMessage SetLanguageCookies(HttpResponseMessage response, HttpRequestMessage request)
+        private HttpResponseMessage SetLanguageCookies(HttpResponseMessage response, HttpRequestMessage request, string defaultLanguage)
         {   
             // Add cookie headers for language (if language has changed)
             if (HttpContext.Request.Headers.ContainsKey("Referer"))
             {
-                var previousLanuage = GetLanuageFromUri(new Uri(HttpContext.Request.Headers["Referer"].FirstOrDefault()));
-                var currentLanguage = GetLanuageFromUri(request.RequestUri);
+                var previousLanuage = GetLanuageFromUri(new Uri(HttpContext.Request.Headers["Referer"].FirstOrDefault()), defaultLanguage);
+                var currentLanguage = GetLanuageFromUri(request.RequestUri, defaultLanguage);
                 if (currentLanguage != previousLanuage)
                 {
                     var cookieExpiry = DateTime.Now.AddDays(7);
@@ -312,14 +315,14 @@ namespace BCC.WPProxy
             return null;
         }
 
-        private string GetLanuageFromUri(Uri uri)
+        private string GetLanuageFromUri(Uri uri, string defaultLanguage)
         {
             var path = uri.PathAndQuery.TrimStart('/');
             if (path.Length > 2 && path[2] == '/')
             {
                 return path.Substring(0, 2);
             }
-            return Settings.DefaultLanguage;
+            return defaultLanguage;
         }
 
 

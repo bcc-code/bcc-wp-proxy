@@ -66,10 +66,7 @@ namespace BCC.WPProxy
                 new Cluster
                 {
                     Id = "wp-cluster",
-                    Destinations = new Dictionary<string, Destination>(StringComparer.OrdinalIgnoreCase)
-                    {
-                        { "wp-website", new Destination() { Address = Settungs.SourceAddress } }
-                    }
+                    Destinations = Settungs.Sites.ToDictionary(s => s.Key, s => new Destination() { Address = s.Value.SourceAddress })                    
                 }
             };
 

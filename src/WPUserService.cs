@@ -9,47 +9,54 @@ namespace BCC.WPProxy
 {
     public class WPUserService
     {
-        public WPUserService(WPCacheService cache, WPProxySettings settings, WPApiClient wpApi)
+        public WPUserService(WPCacheService cache, WPProxySettings settings, WPProxySiteSettingsAccessor siteSettings, WPApiClient wpApi)
         {
             Cache = cache;
             Settings = settings;
+            SiteSettings = siteSettings;
             WPApi = wpApi;
         }
 
         public WPCacheService Cache { get; }
+        public WPProxySiteSettingsAccessor SiteSettings { get; }
         public WPProxySettings Settings { get; }
         public WPApiClient WPApi { get; }
 
         public Task<int> MapToWpUserAsync(ClaimsPrincipal user)
         {
+            var siteSettings = SiteSettings.Current;
             var userId = user?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? null;
             if (string.IsNullOrEmpty(userId))
             {
                 return Task.FromResult(0);
             }
-            return Cache.GetOrCreateAsync($"{Settings.SourceAddress}|wp-user|{userId}", async () =>
+            return Cache.GetOrCreateAsync($"{siteSettings.SourceAddress}|wp-user|{userId}", async () =>
             {
                 var userEmail = user.FindFirst(ClaimTypes.Email)?.Value;
                 var userLogin = user.FindFirst(Settings.UserLoginClaimType)?.Value;
                 var userOrganization = user.FindFirst(Settings.UserOrganizationClaimType)?.Value;
-                var isMember = Settings.SiteOrganizationName.Equals(userOrganization, StringComparison.OrdinalIgnoreCase);
+                var isMember = siteSettings.OrganizationName.Equals(userOrganization, StringComparison.OrdinalIgnoreCase);
                 var isSubscriber = bool.Parse(user.FindFirst(Settings.IsSubscriberClaimType)?.Value?.ToLower() ?? "false");
 
                 var users = await GetWPUsersAsync();
-                var match = users.FirstOrDefault(u => u.IsEnabled && !string.IsNullOrEmpty(u.Email) && u.Email.Equals(userEmail, StringComparison.OrdinalIgnoreCase)) ??
-                            users.FirstOrDefault(u => u.IsEnabled && !string.IsNullOrEmpty(u.Login) && u.Login.Equals(userLogin, StringComparison.OrdinalIgnoreCase)) ??
-                            users.FirstOrDefault(u => u.IsEnabled && !string.IsNullOrEmpty(u.Login) && u.Login.Equals(userOrganization, StringComparison.OrdinalIgnoreCase)) ??
-                            users.FirstOrDefault(u => u.IsEnabled && !string.IsNullOrEmpty(u.Login) && isMember && u.Login.Equals("member", StringComparison.OrdinalIgnoreCase)) ??
-                            users.FirstOrDefault(u => u.IsEnabled && !string.IsNullOrEmpty(u.Login) && isSubscriber && u.Login.Equals("subscriber", StringComparison.OrdinalIgnoreCase));
+                if (users != null)
+                {
+                    var match = users.FirstOrDefault(u => u.IsEnabled && !string.IsNullOrEmpty(u.Email) && u.Email.Equals(userEmail, StringComparison.OrdinalIgnoreCase)) ??
+                                users.FirstOrDefault(u => u.IsEnabled && !string.IsNullOrEmpty(u.Login) && u.Login.Equals(userLogin, StringComparison.OrdinalIgnoreCase)) ??
+                                users.FirstOrDefault(u => u.IsEnabled && !string.IsNullOrEmpty(u.Login) && u.Login.Equals(userOrganization, StringComparison.OrdinalIgnoreCase)) ??
+                                users.FirstOrDefault(u => u.IsEnabled && !string.IsNullOrEmpty(u.Login) && isMember && u.Login.Equals("member", StringComparison.OrdinalIgnoreCase)) ??
+                                users.FirstOrDefault(u => u.IsEnabled && !string.IsNullOrEmpty(u.Login) && isSubscriber && u.Login.Equals("subscriber", StringComparison.OrdinalIgnoreCase));
 
-                var wpId = match?.ID ?? 0;
-                return wpId;
+                    var wpId = match?.ID ?? 0;
+                    return wpId;
+                }
+                return 0;
             }, Settings.CacheDefaultSlidingExpiration);
         }
 
         private Task<List<WPUser>> GetWPUsersAsync()
         {
-            return Cache.GetOrCreateAsync($"{Settings.SourceAddress}|wp-users", () => WPApi.GetAsync<List<WPUser>>("users"), TimeSpan.FromMinutes(5));
+            return Cache.GetOrCreateAsync($"{SiteSettings.Current.SourceAddress}|wp-users", () => WPApi.GetAsync<List<WPUser>>("users"), TimeSpan.FromMinutes(5));
         }        
     }
 

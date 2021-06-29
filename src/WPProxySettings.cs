@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.AspNetCore.Http;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
@@ -6,16 +7,86 @@ using System.Threading.Tasks;
 
 namespace BCC.WPProxy
 {
-    public class WPProxySettings
+
+    public class WPProxySiteSettingsAccessor
     {
-        public const string AuthorizationPolicy = "wp-proxy";
+        public WPProxySiteSettingsAccessor(IHttpContextAccessor httpContext, WPProxySettings settings)
+        {
+            HttpContext = httpContext;
+            Settings = settings;
+        }
+
+        protected IHttpContextAccessor HttpContext { get; }
+        protected WPProxySettings Settings { get; }
+
+        public WPProxySiteSettings Current
+        {
+            get
+            {
+                if (HttpContext.HttpContext == null)
+                {
+                    return null;
+                }
+                if (HttpContext.HttpContext.Items["settings"] == null)
+                {
+                    var host = HttpContext.HttpContext.Request.Host.ToString();
+                    var settings = Settings.GetForHost(host);
+                    HttpContext.HttpContext.Items["settings"] = settings;
+                }
+                return HttpContext.HttpContext.Items["settings"] as WPProxySiteSettings;
+            }
+        }
+    }
+
+    public class WPProxySiteSettings
+    {
+        public string ProxyHost { get; set; }
 
         public string SourceAddress { get; set; }
+
+        public bool UseProxyPlugin { get; set; } = true;
+
+        public bool OffloadAuthentication { get; set; } = true;
 
         public string DefaultLanguage = "no";
 
         public bool AutoLanguageRedirect = true;
 
+        public string OrganizationName { get; set; }
+
+        private string _sourceHost;
+        public string SourceHost
+        {
+            get
+            {
+                if (_sourceHost == null)
+                {
+                    _sourceHost = SourceAddress.Replace("https://", "").Replace("http://", "").Trim('/');
+                }
+                return _sourceHost;
+            }
+        }
+
+    }
+
+    public class WPProxySettings
+    {
+        public const string AuthorizationPolicy = "wp-proxy";
+
+        public IDictionary<string, WPProxySiteSettings> Sites { get; set; }
+
+        public WPProxySiteSettings GetForHost(string host)
+        {
+            foreach (var site in Sites)
+            {
+                if (site.Value.ProxyHost.Equals(host, StringComparison.OrdinalIgnoreCase))
+                {
+                    return site.Value;
+                }
+            }
+            throw new Exception($"{host} could not be mapped to a source address.");
+
+        }
 
         /// <summary>
         /// Sliding expiration for retreiving content from source
@@ -45,40 +116,23 @@ namespace BCC.WPProxy
 
         public bool UseRedis { get; set; } = false;
 
+        public string ProxyKey { get; set; }
+
         public string RedisInstanceName { get; set; } = "";
 
         public string RedisIpAddress { get; set; }
 
         public string RedisPort { get; set; }
 
-        public string ProxyKey { get; set; }
+        public string GoogleStorageBucket { get; set; }
 
         public string UserLoginClaimType { get; set; }
 
         public string UserOrganizationClaimType { get; set; }
 
-        public string IsSubscriberClaimType { get; set; }
-
-        public string SiteOrganizationName { get; set; }
-
-        public string GoogleStorageBucket { get; set; }
-
         public string CountryClaimType { get; set; }
 
-        private string _sourceHost;
-
-
-        public string SourceHost
-        {
-            get
-            {
-                if (_sourceHost == null)
-                {
-                    _sourceHost = SourceAddress.Replace("https://", "").Replace("http://", "").Trim('/');
-                }
-                return _sourceHost;
-            }
-        }
+        public string IsSubscriberClaimType { get; set; }
 
     }
 }

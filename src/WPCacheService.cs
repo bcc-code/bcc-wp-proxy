@@ -17,17 +17,19 @@ namespace BCC.WPProxy
     /// </summary>
     public class WPCacheService
     {
-        public WPCacheService(IMemoryCache memoryCache, IDistributedCache distributedCache, WPProxySettings settings, WPApiClient client)
+        public WPCacheService(IMemoryCache memoryCache, IDistributedCache distributedCache, WPProxySettings settings, WPProxySiteSettingsAccessor siteSettings, WPApiClient client)
         {
             MemoryCache = memoryCache;
             DistributedCache = distributedCache;
             Settings = settings;
+            SiteSettings = siteSettings;
             Wordpress = client;
         }
 
         public IMemoryCache MemoryCache { get; }
         public IDistributedCache DistributedCache { get; }
         public WPProxySettings Settings { get; }
+        public WPProxySiteSettingsAccessor SiteSettings { get; }
         public WPApiClient Wordpress { get; }
 
 
@@ -206,30 +208,30 @@ namespace BCC.WPProxy
         {
             // Check if content has changed max every 5 seconds
             var checkInterval = Settings.CacheContentUpdateCheckInterval;
-            var cacheKey = $"{Settings.SourceAddress}|wp-timestamp";
+            var cacheKey = $"{SiteSettings.Current.SourceAddress}|wp-timestamp";
             var wpUpdated = await GetOrCreateAsync(cacheKey, async () =>
             {
-                long wpTimestamp = await Wordpress.GetAsync<long>("last-updated");
+                var wpTimestamp = await Wordpress.GetAsync<long?>("last-updated");
                 return new WPContentUpdated
                 {
                     LastCheck = DateTimeOffset.Now,
-                    WPTimestamp = wpTimestamp
+                    WPTimestamp = wpTimestamp ?? 0
                 };
             }, TimeSpan.FromMinutes(10), refreshOnWPUpdate: false, cancellation);
 
             if (wpUpdated == null || (DateTimeOffset.Now - wpUpdated.LastCheck) > checkInterval)
             {
                 // Check timestamp again
-                var newWpTimestamp = await Wordpress.GetAsync<long>("last-updated");
+                var newWpTimestamp = await Wordpress.GetAsync<long?>("last-updated");
 
                 // Update cache
                 await SetAsync(cacheKey, new WPContentUpdated
                 {
                     LastCheck = DateTimeOffset.Now,
-                    WPTimestamp = newWpTimestamp
+                    WPTimestamp = newWpTimestamp ?? 0
                 }, 0, null, cancellation);
 
-                return newWpTimestamp;
+                return newWpTimestamp ?? 0;
             }
             return wpUpdated.WPTimestamp;
         }

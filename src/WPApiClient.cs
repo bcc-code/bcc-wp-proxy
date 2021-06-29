@@ -9,18 +9,23 @@ namespace BCC.WPProxy
 {
     public class WPApiClient
     {
-        public WPApiClient(WPProxySettings settings, IHttpClientFactory clientFactory)
+        public WPApiClient(WPProxySiteSettingsAccessor siteSettings, IHttpClientFactory clientFactory)
         {
-            Settings = settings;
+            SiteSettings = siteSettings;
             ClientFactory = clientFactory;
         }
 
         WPProxySettings Settings { get; }
+        public WPProxySiteSettingsAccessor SiteSettings { get; }
         public IHttpClientFactory ClientFactory { get; }
 
-        public async Task<T> GetAsync<T>(string relativePath)
+        public async Task<T> GetAsync<T>( string relativePath)
         {
-            var uri = $"{Settings.SourceAddress}/wp-json/bcc-wp-proxy/v1/{relativePath}";
+            if (!SiteSettings.Current.UseProxyPlugin)
+            {
+                return default(T);
+            }
+            var uri = $"{SiteSettings.Current.SourceAddress}/wp-json/bcc-wp-proxy/v1/{relativePath}";
 
             var client = ClientFactory.CreateClient();
             var request = new HttpRequestMessage

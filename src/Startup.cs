@@ -27,6 +27,7 @@ using System.IO;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Primitives;
 using Microsoft.Net.Http.Headers;
+using Microsoft.AspNetCore.Authorization;
 
 namespace bcc_wp_proxy
 {
@@ -44,7 +45,8 @@ namespace bcc_wp_proxy
         // For more information on how to configure your application, visit https://go.microsoft.com/fwlink/?LinkID=398940
         public void ConfigureServices(IServiceCollection services)
         {
-            var settings = Configuration.GetSection("WPProxy").Get<WPProxySettings>();
+            var settings = new WPProxySettings();
+            Configuration.GetSection("WPProxy").Bind(settings);
 
             if (!settings.UseRedis)
             {
@@ -82,13 +84,15 @@ namespace bcc_wp_proxy
             services.AddHttpProxy();
             services.AddHttpClient();
             services.AddReverseProxy().AddConfig();
-            services.AddAuthorization(options =>
-            {
-                options.AddPolicy(WPProxySettings.AuthorizationPolicy, policy =>
-                {
-                    policy.RequireAuthenticatedUser();
-                });
-            });
+            //services.AddAuthorization(options =>
+            //{
+            //    options.AddPolicy(WPProxySettings.AuthorizationPolicy, policy =>
+            //    {
+            //        policy.RequireAuthenticatedUser();
+            //    });
+            //});
+
+            services.AddSingleton<IAuthorizationPolicyProvider, WPProxyAuthorizationPolicy>();
 
 
             services.Configure<CookiePolicyOptions>(options =>
@@ -191,6 +195,7 @@ namespace bcc_wp_proxy
             services.AddSingleton<WPUserService>();
             services.AddSingleton<WPMessageHandler>();
             services.AddSingleton<WPMessageInvokerFactory>();
+            services.AddSingleton<WPProxySiteSettingsAccessor>();
             services.AddApplicationInsightsTelemetry();
         }
 
@@ -288,12 +293,14 @@ namespace bcc_wp_proxy
                 // Dont't authenticate manifest.json
                 endpoints.Map("/manifest.json", async httpContext => //
                 {
-                    await httpProxy.ProxyAsync(httpContext, settings.SourceAddress, messageInvoker.Create(), requestOptions, transformer);
+                    var siteSettings = settings.GetForHost(httpContext.Request.Host.ToString());
+                    await httpProxy.ProxyAsync(httpContext, siteSettings.SourceAddress, messageInvoker.Create(), requestOptions, transformer);
                 });
 
                 endpoints.Map("/{**catch-all}", async httpContext => //
                 {
-                    await httpProxy.ProxyAsync(httpContext, settings.SourceAddress, messageInvoker.Create(), requestOptions, transformer);
+                    var siteSettings = settings.GetForHost(httpContext.Request.Host.ToString());
+                    await httpProxy.ProxyAsync(httpContext, siteSettings.SourceAddress, messageInvoker.Create(), requestOptions, transformer);
 
                     var errorFeature = httpContext.Features.Get<IProxyErrorFeature>();
                     if (errorFeature != null)
