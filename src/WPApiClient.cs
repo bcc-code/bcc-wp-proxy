@@ -9,15 +9,16 @@ namespace BCC.WPProxy
 {
     public class WPApiClient
     {
-        public WPApiClient(WPProxySiteSettingsAccessor siteSettings, IHttpClientFactory clientFactory)
+        public WPApiClient(WPProxySettings settings, WPProxySiteSettingsAccessor siteSettings, IHttpClientFactory clientFactory)
         {
             SiteSettings = siteSettings;
             ClientFactory = clientFactory;
+            Settings = settings;
         }
 
         WPProxySettings Settings { get; }
-        public WPProxySiteSettingsAccessor SiteSettings { get; }
-        public IHttpClientFactory ClientFactory { get; }
+        WPProxySiteSettingsAccessor SiteSettings { get; }
+        IHttpClientFactory ClientFactory { get; }
 
         public async Task<T> GetAsync<T>( string relativePath)
         {

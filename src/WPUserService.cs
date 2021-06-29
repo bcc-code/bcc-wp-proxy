@@ -35,7 +35,7 @@ namespace BCC.WPProxy
                 var userEmail = user.FindFirst(ClaimTypes.Email)?.Value;
                 var userLogin = user.FindFirst(Settings.UserLoginClaimType)?.Value;
                 var userOrganization = user.FindFirst(Settings.UserOrganizationClaimType)?.Value;
-                var isMember = siteSettings.OrganizationName.Equals(userOrganization, StringComparison.OrdinalIgnoreCase);
+                var isMember = !string.IsNullOrEmpty(siteSettings.OrganizationName) && siteSettings.OrganizationName.Equals(userOrganization, StringComparison.OrdinalIgnoreCase);
                 var isSubscriber = bool.Parse(user.FindFirst(Settings.IsSubscriberClaimType)?.Value?.ToLower() ?? "false");
 
                 var users = await GetWPUsersAsync();
