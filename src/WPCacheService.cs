@@ -35,7 +35,18 @@ namespace BCC.WPProxy
 
         public async Task<T> GetAsync<T>(string key, bool refreshOnWPUpdate = true, CancellationToken cancellation = default)
         {
-            var wpTimestamp = refreshOnWPUpdate ? await GetWPLastUpdatedAsync(cancellation) : 0;
+            long wpTimestamp = 0;
+
+            if (SiteSettings.Current.UseProxyPlugin) 
+            {
+                wpTimestamp = refreshOnWPUpdate? await GetWPLastUpdatedAsync(cancellation) : 0;
+            }
+            else
+            {
+                //Simulate updates every 5 minutes
+                const long fiveMins = 1000 * 300;
+                wpTimestamp = (DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / fiveMins) * fiveMins; //TODO: replace with variable
+            }
 
             var value = default(CacheItem<T>);
             var hasValue = MemoryCache.TryGetValue(key, out value);
