@@ -10,6 +10,10 @@
     <ApplicationInsightsResourceId>/subscriptions/a77a3461-9212-44cf-bc6a-11c6281797e9/resourcegroups/FraBegynnelsen/providers/Microsoft.Insights/components/frabegynnelsen-wp-proxy-dev</ApplicationInsightsResourceId>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <DocumentationFile>BCC.WPProxy.xml</DocumentationFile>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Google.Cloud.SecretManager.V1" Version="1.4.0" />
     <PackageReference Include="Google.Cloud.Storage.V1" Version="3.5.0" />

@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace BCC.WPProxy
@@ -19,21 +20,23 @@ namespace BCC.WPProxy
         protected IHttpContextAccessor HttpContext { get; }
         protected WPProxySettings Settings { get; }
 
+        public static AsyncLocal<WPProxySiteSettings> _currentSettings = new AsyncLocal<WPProxySiteSettings>();
+
         public WPProxySiteSettings Current
         {
             get
             {
-                if (HttpContext.HttpContext == null)
+                if (_currentSettings.Value == null)
                 {
-                    return null;
-                }
-                if (HttpContext.HttpContext.Items["settings"] == null)
-                {
+                    if (HttpContext.HttpContext == null)
+                    {
+                        return null;
+                    }                    
                     var host = HttpContext.HttpContext.Request.Host.ToString();
                     var settings = Settings.GetForHost(host);
-                    HttpContext.HttpContext.Items["settings"] = settings;
+                    _currentSettings.Value = settings;
                 }
-                return HttpContext.HttpContext.Items["settings"] as WPProxySiteSettings;
+                return _currentSettings.Value;
             }
         }
     }

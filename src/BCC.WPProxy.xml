@@ -1,0 +1,65 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>BCC.WPProxy</name>
+    </assembly>
+    <members>
+        <member name="T:BCC.WPProxy.GCPStorageStore">
+            <summary>
+            File store which reads from Google Cloud storage, but buffers content in a distributed in memory cache (i.e. redis)
+            </summary>
+        </member>
+        <member name="T:BCC.WPProxy.WPCacheService">
+            <summary>
+            The WPCacheService provides a memory cache (with fallback to a distributed memory cache) for text content.
+            The cache service also regularly checks for content updates from WordPress which are used to invalidate the cache.
+            </summary>
+        </member>
+        <member name="M:BCC.WPProxy.WPCacheService.GetWPLastUpdatedAsync(System.Threading.CancellationToken)">
+            <summary>
+            Retrieves last updated timestamp from wordpress
+            </summary>
+            <param name="cancellation"></param>
+            <returns></returns>
+        </member>
+        <member name="M:BCC.WPProxy.WPMessageHandler.RewriteUrls(System.Text.StringBuilder,System.String,System.String)">
+            <summary>
+            Transform content by replacing source addresses with proxy addresses etc.
+            </summary>
+            <param name="sourceContent"></param>
+            <returns></returns>
+        </member>
+        <member name="M:BCC.WPProxy.WPMessageHandler.RewriteRedirectUrls(System.Net.Http.HttpResponseMessage,System.Net.Http.HttpRequestMessage,System.String,System.String)">
+            <summary>
+            Transform request headers so that they are compatible with the proxy
+            </summary>
+            <param name="request"></param>
+        </member>
+        <member name="P:BCC.WPProxy.WPProxySettings.CacheDefaultSlidingExpiration">
+            <summary>
+            Sliding expiration for retreiving content from source
+            </summary>
+        </member>
+        <member name="P:BCC.WPProxy.WPProxySettings.CacheDefaultAbsoluteExpiration">
+            <summary>
+            Absolute max time to cache content before retreiving from source again
+            </summary>
+        </member>
+        <member name="P:BCC.WPProxy.WPProxySettings.MultimediaMemoryCacheSlidingExpiration">
+            <summary>
+            Sliding expiration for retreiving image/multimedia content from source
+            </summary>
+        </member>
+        <member name="P:BCC.WPProxy.WPProxySettings.MultimediaMemoryCacheMaxSizeInBytes">
+            <summary>
+            Max size of multimedia items to store in distributed memory cache (instead of just disk storage).
+            This setting essentially affects use of Redis memory
+            </summary>
+        </member>
+        <member name="P:BCC.WPProxy.WPProxySettings.CacheContentUpdateCheckInterval">
+            <summary>
+            How often to check for content updates in WordPress (used to invalidate cache)
+            </summary>
+        </member>
+    </members>
+</doc>
