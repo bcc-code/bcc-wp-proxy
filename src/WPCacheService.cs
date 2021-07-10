@@ -32,6 +32,8 @@ namespace BCC.WPProxy
         public WPProxySiteSettingsAccessor SiteSettings { get; }
         public WPApiClient Wordpress { get; }
 
+        protected static ConcurrentDictionary<string, DateTimeOffset> _lastRefresh = new ConcurrentDictionary<string, DateTimeOffset>();
+
 
         public async Task<T> GetAsync<T>(string key, bool refreshOnWPUpdate = true, CancellationToken cancellation = default)
         {
@@ -43,9 +45,15 @@ namespace BCC.WPProxy
             }
             else
             {
-                //Simulate updates every 5 minutes
-                const long fiveMins = 1000 * 300;
-                wpTimestamp = (DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / fiveMins) * fiveMins; //TODO: replace with variable
+                // If last WP update is unknown, clear cache every 5 mins
+                var now = DateTimeOffset.Now;
+                if (!_lastRefresh.ContainsKey(key) || (now - _lastRefresh[key]).TotalMinutes > 5)
+                {
+                    _lastRefresh[key] = now;
+                    await DistributedCache.RemoveAsync(key);
+                    MemoryCache.Remove(key);
+                    return default(T);
+                }
             }
 
             var value = default(CacheItem<T>);
